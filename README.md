@@ -5,7 +5,7 @@ instruction-tuned models act as an enterprise procurement assistant under a sing
 embedded rule, and we measure how compliance shifts with rule phrasing, financial
 enforcement, institutional authority, peer signals, and direct user pressure.
 
-- **Paper:** https://mika-okamoto.github.io/assets/pdf/ai_agent_regulation_compliance.pdf
+- **Paper:** https://trace-ai-labs.github.io/ai-incentives/paper.pdf
 - **Interactive results:** https://trace-ai-labs.github.io/ai-incentives/
 
 ## The task
