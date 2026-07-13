@@ -40,7 +40,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
 
-from src.benchmark.batch import (BatchRequest, DEFAULT_JUDGE_MODEL, call_one,
+from src.benchmark.batch import (BatchRequest, DEFAULT_EXTRACT_MODEL, call_one,
                                  get_api_key, resolve_model)
 from src.benchmark.items import DEFAULT_OUT as ITEMS_PATH
 from src.benchmark.items import load_items
@@ -341,7 +341,8 @@ def main() -> None:
     ap.add_argument("--scenarios", nargs="*", default=None)
     ap.add_argument("--split", default=None,
                     choices=["dev", "public_test", "private_holdout"])
-    ap.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL, type=resolve_model)
+    ap.add_argument("--judge-model", default=DEFAULT_EXTRACT_MODEL, type=resolve_model,
+                    help="Stage-B outcome extractor (small/cheap; tau-gated)")
     ap.add_argument("--workers", type=int, default=8)
     ap.add_argument("--max-tokens", type=int, default=1024)
     ap.add_argument("--temperature", type=float, default=1.0)

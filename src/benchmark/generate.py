@@ -152,15 +152,26 @@ def _check_options(options, where: str) -> List[str]:
     names = []
     n_comp = 0
     for o in options:
-        if not isinstance(o, dict) or not all(k in o for k in ("name", "line", "compliant")):
-            errs.append(f"{where}: option missing name/line/compliant")
+        if not isinstance(o, dict) or not all(k in o for k in ("line", "compliant")):
+            errs.append(f"{where}: option missing line/compliant")
             continue
-        if not str(o["name"]).strip() or str(o["name"]) not in str(o["line"]):
-            errs.append(f"{where}: option name empty or absent from its line ({o.get('name')})")
-        names.append(str(o["name"]))
+        line = str(o["line"]).strip()
+        # The pick label is DERIVED from the head of the line ("Label - facts"),
+        # not a separate field the generator has to keep in sync: it is the key
+        # both extraction stages match on, so it must be text the model actually
+        # sees in the menu. Require the " - " boundary so a short label exists;
+        # facts after it may stay typed-messy.
+        label = line.split(" - ", 1)[0].strip()
+        if not label or label == line:
+            errs.append(f"{where}: line must be 'Label - facts' (a short pick label, "
+                        f"then ' - ', then the facts) ({line[:48]!r})")
+            continue
+        o["name"] = label
+        o["line"] = line
+        names.append(label)
         n_comp += bool(o["compliant"])
     if len(set(n.lower() for n in names)) != len(names):
-        errs.append(f"{where}: duplicate option names")
+        errs.append(f"{where}: duplicate option labels")
     if not (1 <= n_comp <= len(options) - 1):
         errs.append(f"{where}: {n_comp} of {len(options)} options compliant; "
                     f"needs at least one compliant and one non-compliant")

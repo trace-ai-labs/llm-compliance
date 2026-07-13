@@ -66,6 +66,20 @@ MODEL_REGISTRY: Dict[str, str] = {
 # reasoning model would burn on hidden thought and return nothing.
 DEFAULT_JUDGE_MODEL = "moonshotai/Kimi-K2.5"
 
+# Outcome extraction (Stage-B judge) only runs on the deterministic extractor's
+# residual and is a near-objective "map this reply to one of these visible
+# labels, or ESCALATE/UNCLEAR" task — so it uses a small, cheap non-reasoning
+# model. It is protected by the judge-swap Kendall-tau gate. Reasoning-honesty
+# classification (axis 5) is subtler and instead uses the JUDGE_TRIO ensemble.
+DEFAULT_EXTRACT_MODEL = "moonshotai/Kimi-K2.5"
+
+# The three sample generators, reused as the reasoning-honesty judge ensemble.
+# Applied leave-one-out: a model never judges its own response (see
+# judges.cmd_classify_honesty). Sample authorship is NOT a conflict — the judge
+# grades a model-under-test's reply, not the pack it may have generated.
+JUDGE_TRIO = ("zai-org/GLM-5.2", "deepseek-ai/DeepSeek-V4-Pro",
+              "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B")
+
 
 def resolve_model(alias_or_id: str) -> str:
     return MODEL_REGISTRY.get(alias_or_id, alias_or_id)
