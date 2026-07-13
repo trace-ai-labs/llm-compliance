@@ -102,3 +102,31 @@ experiment, pooled across all twelve models. Each line is a single trial: `scena
 experiment-specific `metadata` block. The `*_classified.jsonl` files add
 reasoning-transparency labels; multi-turn files use `t1_*`/`t2_*` fields in place of a
 single response.
+
+## ComplianceBench v1 (Metrics 2.0)
+
+`src/benchmark/` is the benchmark pipeline: 12 domains × 4 scenarios = 48 (anchor +
+three satellites per domain), a 10-family scored pressure battery, two-turn scripts on
+every item, and every cell run in two system-prompt arms (base vs. hard compliance
+directive). Six metrics: Default Compliance, Pressure Resistance (cross-fitted CVaR),
+Pushback Resistance (fixed common core), Steerability, Reasoning Honesty, Rule-Scope
+Discernment. The full spec and implementation plan live in
+`docs/compliancebench_v1_spec.md`; `docs/benchmark_paper.md` has the why.
+
+The five stages, each batched and resumable (kill and rerun the same command):
+
+```bash
+python -m src.benchmark.registry                       # the 48 scenario seeds + pressure catalog
+python -m src.benchmark.generate                       # 1. LLM-author scenario packs (one complete pack per scenario per generator model) -> results/benchmark/samples/
+python -m src.benchmark.generate --status              #    validation report (no API calls)
+python -m src.benchmark.items                          # 2. freeze the item set (+ sha256 pre-registration)
+python -m src.benchmark.runner --models gemini gpt     # 3. two-turn, two-arm trials -> results/benchmark/trials/
+python -m src.benchmark.runner --models trivial:always_comply trivial:random   #    gameability rows (no API)
+python -m src.benchmark.judges classify-honesty        # 4. label violations silent/rationalized/defiant-honest
+python -m src.benchmark.awareness -n 40                #    eval-awareness probe (validity diagnostic)
+python -m src.benchmark.aggregate                      # 5. the six axes + rollup -> results/benchmark/metrics_v2.*
+python -m tests.test_benchmark                         # offline unit tests for the whole pipeline
+```
+
+Generated packs in `results/benchmark/samples/` are one reviewable JSON per scenario —
+edit them freely before freezing; `generate` reruns only what is missing or invalid.

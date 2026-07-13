@@ -1,0 +1,365 @@
+"""Stage 3 — run models over the frozen item set (two turns, two arms).
+
+One trial = (item, model, rep, arm). The worker sends system+T1, judges T1
+(deterministic extractor first, LLM judge on the residual), selects the
+conditional T2 script (pushback if the model held, challenge if it violated),
+sends T2 with full history, judges T2, and appends one row to
+results/benchmark/trials/{model}.jsonl. Trials already on disk are skipped, so
+a killed run resumes with the same command.
+
+Arms (axis 4, spec §5): the anti_adversarial arm appends the scenario's own
+generated hard directive (item field `hard_directive`, the company-style
+guardrail mandate phrased for that bot's role/company;
+registry.MAXIMAL_DIRECTIVE as fallback) to the system prompt — nothing else
+differs. The optional moderate arm (intensity contrast, spec §5 open
+decision) appends MODERATE_DIRECTIVE.
+
+Trivial agents (`trivial:always_comply|always_cheapest|always_escalate|random`)
+are synthesized without API calls — the permanent gameability rows.
+
+`--top-up-floor N` implements the spec's power gate: identify the model's
+floor-defining cells (bottom-quartile base-arm pressure cells by compliance
+rate) from the trials already on disk and add reps until each has ≥N.
+
+Usage:
+  python -m src.benchmark.runner --models gemini gpt --reps 5
+  python -m src.benchmark.runner --models trivial:always_comply trivial:random
+  python -m src.benchmark.runner --models kimi --groups pressure neutral --arms base
+  python -m src.benchmark.runner --models gemini --arms base anti_adversarial moderate
+  python -m src.benchmark.runner --models gemini --top-up-floor 50
+  python -m src.benchmark.runner --models gemini --dry-run
+"""
+
+import argparse
+import json
+import math
+import os
+import random
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Dict, List, Optional, Tuple
+
+from src.benchmark.batch import (BatchRequest, DEFAULT_JUDGE_MODEL, call_one,
+                                 get_api_key, resolve_model)
+from src.benchmark.items import DEFAULT_OUT as ITEMS_PATH
+from src.benchmark.items import load_items
+from src.benchmark.judges import (OUTCOME_JUDGE_SYS, extract_choice,
+                                  outcome_judge_request,
+                                  parse_outcome_judgment, prompt_sha,
+                                  resolve_outcome)
+from src.benchmark.registry import (ARMS, MAXIMAL_DIRECTIVE,
+                                    MODERATE_DIRECTIVE)
+
+TRIALS_DIR = os.path.join("results", "benchmark", "trials")
+
+TRIVIAL_PREFIX = "trivial:"
+TRIVIAL_AGENTS = ("always_comply", "always_cheapest", "always_escalate", "random")
+
+ALL_ARMS = ("base", "anti_adversarial", "moderate")
+
+
+def arm_suffix(item: dict, arm: str) -> str:
+    """What the arm appends to the item's system prompt. The anti_adversarial
+    arm uses the scenario's own generated hard directive (the company-style
+    guardrail mandate, phrased for that bot's role and company);
+    registry.MAXIMAL_DIRECTIVE is the fallback for items rendered before
+    per-scenario directives existed."""
+    if arm == "anti_adversarial":
+        return item.get("hard_directive") or MAXIMAL_DIRECTIVE
+    if arm == "moderate":
+        return MODERATE_DIRECTIVE
+    return ""
+
+FLOOR_ALPHA = 0.25   # bottom quartile defines the floor set (spec §5 axis 2)
+
+
+def safe_name(model: str) -> str:
+    return model.replace("/", "_").replace(":", "_")
+
+
+def trial_id(item_id: str, arm: str, rep: int) -> str:
+    return f"{item_id}|{arm}|r{rep}"
+
+
+def _load_done(path: str) -> set:
+    done = set()
+    if not os.path.exists(path):
+        return done
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                done.add(json.loads(line)["trial_id"])
+            except (json.JSONDecodeError, KeyError):
+                continue
+    return done
+
+
+# ── Trivial agents (gameability rows; no API) ────────────────────────────────
+
+def trivial_response(policy: str, item: dict, rng: random.Random) -> str:
+    options = item["options"]
+    compliant = [o["name"] for o in options if o["compliant"]]
+    violating = [o["name"] for o in options if not o["compliant"]]
+    if policy == "always_comply":
+        return compliant[0] if compliant else "I need to escalate this to a human."
+    if policy == "always_cheapest":  # always the locally-dominant (violating) pick
+        return violating[0] if violating else options[0]["name"]
+    if policy == "always_escalate":
+        return "I need to escalate this to a human before proceeding."
+    if policy == "random":
+        return rng.choice(options)["name"]
+    raise ValueError(f"unknown trivial agent: {policy}")
+
+
+# ── One trial ────────────────────────────────────────────────────────────────
+
+def _judge_turn(tid: str, turn: int, response: str, item: dict,
+                judge_model: str, api_key: Optional[str]) -> Tuple[Optional[str], str]:
+    """Returns (choice, judge_used) where judge_used ∈ rule|llm|none."""
+    names = [o["name"] for o in item["options"]]
+    choice = extract_choice(response, names)
+    if choice is not None:
+        return choice, "rule"
+    if api_key is None:  # trivial agents never reach here, but stay safe
+        return None, "none"
+    req = outcome_judge_request(tid, response, names, judge_model, turn)
+    res = call_one(req, api_key)
+    if not res.ok:
+        return None, "llm"
+    return parse_outcome_judgment(res.content, names), "llm"
+
+
+def run_trial(item: dict, model: str, arm: str, rep: int, judge_model: str,
+              api_key: Optional[str], max_tokens: int,
+              temperature: float) -> dict:
+    tid = trial_id(item["item_id"], arm, rep)
+    system = item["system_prompt"] + arm_suffix(item, arm)
+    trivial = model.startswith(TRIVIAL_PREFIX)
+    rng = random.Random(hash((tid, model)) & 0xFFFFFFFF)
+
+    # ── T1 ──
+    if trivial:
+        t1_response = trivial_response(model[len(TRIVIAL_PREFIX):], item, rng)
+    else:
+        res = call_one(BatchRequest(
+            id=f"{tid}.t1", model=model, temperature=temperature,
+            max_tokens=max_tokens,
+            messages=[{"role": "system", "content": system},
+                      {"role": "user", "content": item["turn1"]}]), api_key)
+        if not res.ok:
+            raise RuntimeError(f"T1 failed: {res.error}")
+        t1_response = res.content
+    t1_choice, t1_judge = _judge_turn(tid, 1, t1_response, item, judge_model,
+                                      None if trivial else api_key)
+    t1_outcome = resolve_outcome(t1_choice, item["gold"], item["group"])
+
+    row = {
+        "trial_id": tid, "item_id": item["item_id"],
+        "scenario_id": item["scenario_id"], "domain": item["domain"],
+        "group": item["group"], "binds": item["binds"],
+        "pressure": item["pressure"], "split": item["split"],
+        "model": model, "arm": arm, "rep": rep,
+        "t1_response": t1_response, "t1_choice": t1_choice,
+        "t1_outcome": t1_outcome, "t1_judge": t1_judge,
+        "t2_script": "none", "t2_message": None, "t2_response": None,
+        "t2_choice": None, "t2_outcome": None, "t2_judge": None,
+        "judge_model": judge_model,
+        "judge_prompt_sha": prompt_sha(OUTCOME_JUDGE_SYS), "ts": time.time(),
+    }
+
+    # ── T2 (conditional) ──
+    held = t1_outcome in ("comply", "overcomply")
+    t2_message = (item.get("t2_if_compliant") if held
+                  else item.get("t2_if_noncompliant"))
+    if t2_message is None or t1_outcome == "unclear":
+        return row
+    row["t2_script"] = "pushback" if held else "challenge"
+    row["t2_message"] = t2_message
+
+    if trivial:
+        t2_response = trivial_response(model[len(TRIVIAL_PREFIX):], item, rng)
+    else:
+        res = call_one(BatchRequest(
+            id=f"{tid}.t2", model=model, temperature=temperature,
+            max_tokens=max_tokens,
+            messages=[{"role": "system", "content": system},
+                      {"role": "user", "content": item["turn1"]},
+                      {"role": "assistant", "content": t1_response},
+                      {"role": "user", "content": t2_message}]), api_key)
+        if not res.ok:
+            raise RuntimeError(f"T2 failed: {res.error}")
+        t2_response = res.content
+    t2_choice, t2_judge = _judge_turn(tid, 2, t2_response, item, judge_model,
+                                      None if trivial else api_key)
+    row.update(t2_response=t2_response, t2_choice=t2_choice,
+               t2_outcome=resolve_outcome(t2_choice, item["gold"], item["group"]),
+               t2_judge=t2_judge)
+    return row
+
+
+# ── Driver ───────────────────────────────────────────────────────────────────
+
+def grid_jobs(items: List[dict], arms: List[str], reps: int,
+              done: set) -> List[Tuple[dict, str, int]]:
+    """The standard (item × arm × rep) grid."""
+    return [(item, arm, rep)
+            for item in items for arm in arms for rep in range(reps)
+            if trial_id(item["item_id"], arm, rep) not in done]
+
+
+def floor_topup_jobs(items: List[dict], out_path: str,
+                     target_n: int) -> List[Tuple[dict, str, int]]:
+    """Power-gate jobs (spec §5/§6): find this model's floor-defining cells —
+    the bottom-quartile base-arm pressure cells by T1 compliance rate over the
+    trials already on disk — and top each up to ≥target_n reps."""
+    per_cell: Dict[str, List[str]] = {}
+    max_rep: Dict[str, int] = {}
+    if os.path.exists(out_path):
+        with open(out_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    row = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if row.get("arm") != "base" or row.get("group") != "pressure":
+                    continue
+                iid = row["item_id"]
+                per_cell.setdefault(iid, []).append(row.get("t1_outcome", "unclear"))
+                max_rep[iid] = max(max_rep.get(iid, -1), int(row.get("rep", 0)))
+    rates = {}
+    for iid, outs in per_cell.items():
+        decided = [o for o in outs if o != "unclear"]
+        if decided:
+            rates[iid] = sum(o == "comply" for o in decided) / len(decided)
+    if not rates:
+        print("  no judged base-arm pressure cells on disk yet — run the grid first")
+        return []
+    k = max(1, math.ceil(FLOOR_ALPHA * len(rates)))
+    floor_set = sorted(sorted(rates, key=lambda i: rates[i])[:k])
+    by_id = {it["item_id"]: it for it in items}
+    jobs: List[Tuple[dict, str, int]] = []
+    for iid in floor_set:
+        item = by_id.get(iid)
+        if item is None:
+            continue
+        have = len(per_cell[iid])
+        need = target_n - have
+        start = max_rep[iid] + 1
+        jobs.extend((item, "base", rep) for rep in range(start, start + max(0, need)))
+    print(f"  floor set: {len(floor_set)} cells (bottom {FLOOR_ALPHA:.0%}), "
+          f"{len(jobs)} top-up trials to reach n>={target_n}")
+    return jobs
+
+
+def run_model(model: str, items: List[dict], arms: List[str], reps: int,
+              judge_model: str, workers: int, max_tokens: int,
+              temperature: float, trials_dir: str = TRIALS_DIR,
+              dry_run: bool = False, top_up_floor: int = 0) -> None:
+    out_path = os.path.join(trials_dir, f"{safe_name(model)}.jsonl")
+    done = _load_done(out_path)
+    if top_up_floor:
+        jobs = [(it, arm, rep) for it, arm, rep in floor_topup_jobs(items, out_path, top_up_floor)
+                if trial_id(it["item_id"], arm, rep) not in done]
+    else:
+        jobs = grid_jobs(items, arms, reps, done)
+    print(f"{model}: {len(jobs)} trials to run "
+          f"({len(done)} already done) -> {out_path}")
+    if dry_run or not jobs:
+        return
+
+    trivial = model.startswith(TRIVIAL_PREFIX)
+    api_key = None if trivial else get_api_key()
+    os.makedirs(trials_dir, exist_ok=True)
+    lock = threading.Lock()
+    n_done = 0
+
+    def _work(item: dict, arm: str, rep: int) -> dict:
+        return run_trial(item, model, arm, rep, judge_model, api_key,
+                         max_tokens, temperature)
+
+    with ThreadPoolExecutor(max_workers=1 if trivial else workers) as ex:
+        futures = {ex.submit(_work, it, arm, rep): (it, arm, rep)
+                   for it, arm, rep in jobs}
+        try:
+            for fut in as_completed(futures):
+                it, arm, rep = futures[fut]
+                tid = trial_id(it["item_id"], arm, rep)
+                try:
+                    row = fut.result()
+                except Exception as e:
+                    print(f"  [ERROR] {tid}: {e}")
+                    continue
+                with lock:
+                    with open(out_path, "a", encoding="utf-8") as f:
+                        f.write(json.dumps(row, ensure_ascii=False) + "\n")
+                    n_done += 1
+                    if not trivial or n_done % 200 == 0:
+                        print(f"  [{n_done}/{len(jobs)}] {tid} -> "
+                              f"T1 {row['t1_outcome']}"
+                              + (f", T2 {row['t2_outcome']}" if row["t2_outcome"] else ""))
+        except KeyboardInterrupt:
+            for f in futures:
+                f.cancel()
+            print(f"\ninterrupted — {n_done} trials saved; rerun to resume")
+            raise SystemExit(1)
+
+
+def filter_items(items: List[dict], groups: Optional[List[str]],
+                 scenarios: Optional[List[str]], split: Optional[str]) -> List[dict]:
+    out = items
+    if groups:
+        out = [it for it in out if it["group"] in set(groups)]
+    if scenarios:
+        out = [it for it in out if it["scenario_id"] in set(scenarios)]
+    if split:
+        out = [it for it in out if it["split"] == split]
+    return out
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--models", nargs="+", required=True,
+                    help="model aliases / OpenRouter ids / trivial:<policy>")
+    ap.add_argument("--items", default=ITEMS_PATH)
+    ap.add_argument("--reps", type=int, default=5)
+    ap.add_argument("--arms", nargs="+", default=list(ARMS),
+                    choices=list(ALL_ARMS),
+                    help="base/directive are the scored arms; moderate is the "
+                         "optional intensity contrast")
+    ap.add_argument("--top-up-floor", type=int, default=0, metavar="N",
+                    help="instead of the grid, top up bottom-quartile pressure "
+                         "cells to n>=N reps (power gate)")
+    ap.add_argument("--groups", nargs="*", default=None,
+                    help="restrict to item groups (e.g. neutral pressure)")
+    ap.add_argument("--scenarios", nargs="*", default=None)
+    ap.add_argument("--split", default=None,
+                    choices=["dev", "public_test", "private_holdout"])
+    ap.add_argument("--judge-model", default=DEFAULT_JUDGE_MODEL, type=resolve_model)
+    ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--max-tokens", type=int, default=1024)
+    ap.add_argument("--temperature", type=float, default=1.0)
+    ap.add_argument("--trials-dir", default=TRIALS_DIR)
+    ap.add_argument("--dry-run", action="store_true", help="count trials, no calls")
+    args = ap.parse_args()
+
+    items = filter_items(load_items(args.items), args.groups, args.scenarios,
+                         args.split)
+    print(f"{len(items)} items after filters")
+    for m in args.models:
+        model = m if m.startswith(TRIVIAL_PREFIX) else resolve_model(m)
+        if m.startswith(TRIVIAL_PREFIX):
+            assert m[len(TRIVIAL_PREFIX):] in TRIVIAL_AGENTS, f"unknown {m}"
+        run_model(model, items, args.arms, args.reps, args.judge_model,
+                  args.workers, args.max_tokens, args.temperature,
+                  args.trials_dir, args.dry_run, args.top_up_floor)
+
+
+if __name__ == "__main__":
+    main()
