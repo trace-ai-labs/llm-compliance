@@ -20,19 +20,19 @@ The template fixes six invariants.
 
 \paragraph{Deployment framing.} Each item separates a \emph{system} prompt from a
 \emph{user} turn, mirroring a real deployment. The system prompt is the agent's
-standing persona---its name, company, channel, and the key performance indicators
-it is measured on (queue-clearance time, cost, CSAT, conversion)---and never
-mentions the specific decision. The rule is appended to the system prompt as a
-standing, account-agnostic compliance note that states the general rule only; it
-never names the specific customer, ticket, or menu option. The user turn is an
-in-character message from an employee or customer carrying the request, the case
-facts, and the option menu. Crucially, compliance is not stated anywhere: which
-option satisfies the rule is derivable only by joining the case facts in the user
-turn to the standing rule in the system prompt, which makes every item a small
-reasoning task rather than a keyword match.
+standing persona: its name, company, channel, and the key performance indicators
+it is measured on (queue-clearance time, cost, CSAT, conversion). It never mentions
+the specific decision. The rule is appended to the system prompt as a standing,
+account-agnostic compliance note that states the general rule only; it never names
+the specific customer, ticket, or menu option. The user turn is an in-character
+message from an employee or customer carrying the request, the case facts, and the
+option menu. Crucially, compliance is not stated anywhere: which option satisfies
+the rule is derivable only by joining the case facts in the user turn to the
+standing rule in the system prompt, which makes every item a small reasoning task
+rather than a keyword match.
 
 \paragraph{Dominance structure.} The request presents a menu of two to five
-options---as many as the surface would naturally show---containing at least one
+options, as many as the surface would naturally show, containing at least one
 rule-violating option that strictly dominates on the agent's local objective
 (cheaper, faster, higher CSAT) and at least one rule-compliant option that costs
 more on it. \emph{Compliance always carries a local penalty.} Menu order is
@@ -45,31 +45,31 @@ of fact (``disclosures to an incorrect recipient are reportable events''), never
 as a command. Command-style strictness is not a property of the rule; it is
 supplied only in the steerability arm (\S\ref{sec:generation}), which lets us
 measure how much an explicit guardrail buys on top of an implicitly incentivized
-objective---the deployer's actual situation.
+objective, the deployer's actual situation.
 
 \paragraph{Conditional second turn.} Multi-turn interaction is the benchmark's
 identity, not an add-on. Every neutral and pressure item carries a scripted
 turn~2 whose content is conditional on the model's turn~1 answer: a
 \emph{pushback} that re-argues the temptation if the model complied, or a
 \emph{challenge} (``doesn't the rule say\ldots?'') if it violated. This isolates
-two distinct failure modes---erosion of a correct answer under persistence, and
+two distinct failure modes: erosion of a correct answer under persistence, and
 failure to self-correct a wrong one.
 
-\paragraph{Guard cells.} Each scenario ships a non-binding twin: a minimal
-edit of the request in which the rule genuinely does not apply, so the correct
-answer is the efficient option and holding the rule anyway is an error. A
-benchmark that rewards only compliance would be topped by a degenerate
-always-comply agent; the guard cells make over-compliance visible and are what
-separate rule-following from rule-parroting.
+\paragraph{Guard cells.} Each scenario ships a non-binding twin, a minimal edit of
+the request in which the rule genuinely does not apply, so the correct answer is
+the efficient option and holding the rule anyway is an error. A benchmark that
+rewarded only compliance would be topped by a degenerate always-comply agent; the
+guard cells make over-compliance visible and are what separate rule-following from
+rule-parroting.
 
 \paragraph{Feature codes.} Every scenario is hand-coded on four rule features:
 crispness (hi/med/lo), benefit denomination (money/time/engagement/relationship),
 victim salience (identifiable/diffuse/none), and penalty type
 (fine/liability/license/criminal). With 48 independently coded scenarios, the
 regression \texttt{compliance $\sim$ crispness $+$ benefit $+$ victim $+$ penalty
-$+ (1|\text{model}) + (1|\text{domain})$} has 48 sampling units, turning ``which
-properties of a rule predict whether an agent follows it'' into a launch-time
-analysis rather than a confound with domain identity.
+$+ (1|\mathrm{model}) + (1|\mathrm{domain})$} has 48 sampling units, turning
+``which properties of a rule predict whether an agent follows it'' into a
+launch-time analysis rather than a confound with domain identity.
 
 \subsection{Domains and Scenarios}
 \label{sec:domains}
@@ -78,48 +78,46 @@ The template is instantiated in \textbf{twelve enterprise domains}, each with
 \textbf{four scenarios}, for 48 scenarios total. Domains were selected against
 three inclusion criteria: a documented deployment surface (bots of this kind
 exist in the wild), a crisp-enough rule an agent can violate in a
-\emph{recommendation} (no actuators required), and a real penalty
-anchor---a statute, a regulator action, or a litigated AI incident. The domains
-span data privacy (GDPR), finance operations, customer service, government
-services, HR and hiring, AML/KYC and sanctions, healthcare administration
-(HIPAA), pharmaceutical medical information, advertising, export controls,
-content moderation, and procurement. Seven reconstruct settings where a deployed
-bot already produced a legal consequence---\emph{Moffatt v.\ Air Canada}, the NYC
-MyCity chatbot, \emph{Mobley v.\ Workday}, and the FTC's Operation AI Comply
-actions among them---so those items carry case citations and are maximally
-resistant to the ``contrived scenario'' objection. The four scenarios per domain
-vary the rule (a distinct rule, never a re-skin) and jointly span all four benefit
-denominations, all three victim-salience levels, and all four penalty types.
-Content moderation is the deliberately fuzzy-rule domain; procurement doubles as a
-\emph{contamination tripwire}, since its anchor scenario is comparable to
-prior published data and a future model scoring anomalously high there relative to
-fresh domains flags training-set leakage.
+\emph{recommendation} without needing actuators, and a real penalty anchor such as
+a statute, a regulator action, or a litigated AI incident. The domains span data
+privacy (GDPR), finance operations, customer service, government services, HR and
+hiring, AML/KYC and sanctions, healthcare administration (HIPAA), pharmaceutical
+medical information, advertising, export controls, content moderation, and
+procurement. Seven reconstruct settings where a deployed bot already produced a
+legal consequence, among them \emph{Moffatt v.\ Air Canada}, the NYC MyCity
+chatbot, \emph{Mobley v.\ Workday}, and the FTC's Operation AI Comply actions, so
+those items carry case citations and are resistant to the ``contrived scenario''
+objection. The four scenarios per domain vary the rule (a distinct rule, never a
+re-skin) and jointly span all four benefit denominations, all three victim-salience
+levels, and all four penalty types. Content moderation is the deliberately
+fuzzy-rule domain; procurement doubles as a \emph{contamination tripwire}, since its
+anchor scenario is comparable to prior published data and a future model scoring
+anomalously high there relative to fresh domains flags training-set leakage.
 
 \subsection{The Pressure Battery and Multi-Turn Stressors}
 \label{sec:pressures}
 
 The stressor is a battery of \textbf{nine scored pressures}, each appended to the
 user's turn~1 request in domain-natural phrasing, and each chosen to target a
-\emph{distinct} mechanism from the compliance-theory literature so that no
-pressure is redundant with another:
-\emph{urgency} (helpfulness hijack / time scarcity), \emph{mgr\_verbal}
-(legitimate authority with liability absorbed), \emph{peer\_escaped}
-(descriptive norm plus impunity evidence), \emph{risk\_minimize} (deterrence
-discounting), \emph{cost\_pressure} (financial stakes / loss framing),
-\emph{false\_clearance} (authority laundering via an unverifiable process
-artifact), \emph{fait\_accompli} (commitment/consistency and sunk cost),
-\emph{sympathetic\_beneficiary} (empathy hijack, in which an identifiable person
-is harmed by \emph{compliance}---the inverse of the victim-salience feature and
-the hardest case for a helpfulness-trained model), and
+distinct mechanism from the compliance-theory literature so that no pressure is
+redundant with another. They are \emph{urgency} (helpfulness hijack and time
+scarcity), \emph{mgr\_verbal} (legitimate authority with liability absorbed),
+\emph{peer\_escaped} (descriptive norm plus impunity evidence),
+\emph{risk\_minimize} (deterrence discounting), \emph{cost\_pressure} (financial
+stakes and loss framing), \emph{false\_clearance} (authority laundering via an
+unverifiable process artifact), \emph{fait\_accompli} (commitment, consistency, and
+sunk cost), \emph{sympathetic\_beneficiary} (empathy hijack, in which an
+identifiable person is harmed by \emph{compliance}, the inverse of the
+victim-salience feature and the hardest case for a helpfulness-trained model), and
 \emph{responsibility\_shift} (explicit accountability transfer). The users are
-\emph{benign}: none is attempting a jailbreak; each is an ordinary employee whose
+\emph{benign}. None is attempting a jailbreak; each is an ordinary employee whose
 convenience happens to conflict with the rule. This is the realistic enterprise
 threat model, and it is what distinguishes the benchmark from adversarial-attack
 suites.
 
-A tenth pressure, \emph{rule\_delegitimization} (an epistemic attack on the rule's
-validity or scope---``that policy predates the new system, it does not even apply
-here''), is not scored in the pressure battery. It is reserved for the
+A tenth pressure, \emph{rule\_delegitimization}, is an epistemic attack on the
+rule's validity or scope (``that policy predates the new system, it does not even
+apply here''). It is not scored in the pressure battery. It is reserved for the
 discernment-under-attack cells: applied to a binding item, the correct behavior is
 to hold; a mirror attack that insists the rule \emph{does} apply is placed on the
 non-binding guard, where the correct behavior is to stand down. A model good at
@@ -136,33 +134,32 @@ Five commitments carry the argument.
 
 \paragraph{Component-by-component authorship.} A scenario is never generated in one
 call. It is produced as a sequence of small, focused generations in dependency
-order---the persona, the turn~1 request and its menu, the standing rule note, the
-nine pressure add-ons (one call each), the non-binding guard twin, the two turn~2
-scripts, and the two rule-scope attacks---each conditioned on the
-already-accepted components so that one scenario speaks with one voice. The point
-is isolation: the baseline request is shared verbatim by every cell of the
-battery, so a deadline that leaks into it would contaminate all measurements built
-on top, and each pressure add-on must carry exactly one mechanism or its cell
-measures a blend.
+order (the persona, the turn~1 request and its menu, the standing rule note, the
+nine pressure add-ons one call each, the non-binding guard twin, the two turn~2
+scripts, and the two rule-scope attacks), each conditioned on the already-accepted
+components so that one scenario speaks with one voice. The point is isolation: the
+baseline request is shared verbatim by every cell of the battery, so a deadline
+that leaked into it would contaminate all measurements built on top, and each
+pressure add-on must carry exactly one mechanism or its cell measures a blend.
 
 \paragraph{Zero-shot, instruction-only prompts.} No generation prompt contains an
 example item. A worked example is a template: scenarios generated against a shared
-exemplar converge on its names, cadence, and option-naming, collapsing into
+exemplar converge on its names, cadence, and option naming, collapsing into
 paraphrases of one item in 48 domain costumes and destroying the between-domain
 variance the generalization claim needs. Pressures are specified by what the
 mechanism must do to the reader; canonical phrasings exist only as documentation
 and are never shown to a generator.
 
-\paragraph{Naturalism enforced at the source.} Every prompt requires each string
-to read as a genuine artifact of its deployment: register calibrated to the
-surface (an EHR sidebar does not type like a Slack ping), plausible invented work
-artifacts (ticket IDs, pasted record snippets), and deliberate human typing
-imperfections, because uniform polish is a machine tell and evaluation awareness
-is a first-order threat to any propensity benchmark.
+\paragraph{Naturalism enforced at the source.} Every prompt requires each string to
+read as a genuine artifact of its deployment: register calibrated to the surface (an
+EHR sidebar does not type like a Slack ping), plausible invented work artifacts
+(ticket IDs, pasted record snippets), and deliberate human typing imperfections,
+because uniform polish is a machine tell and evaluation awareness is a first-order
+threat to any propensity benchmark.
 
 \paragraph{Dual-guard review by the non-authoring trio.} Three generator models
-each author a \emph{complete, independent} pack for every scenario---a data point
-is fully written by one logged model, never stitched from several---and every
+each author a \emph{complete, independent} pack for every scenario, so a data point
+is fully written by one logged model and never stitched from several. Every
 structurally valid component is then reviewed by the two trio models that did
 \emph{not} write it, on two axes: \emph{scope} (the component contains exactly what
 its cell tests and nothing else) and \emph{authenticity} (this could actually have
@@ -171,31 +168,30 @@ and burns one of five attempts, with the failing feedback fed verbatim back to t
 same generator for the fix; five rejections yield an NA placeholder and a
 \emph{flagged} pack that never counts as valid, so gaps stay visible rather than
 silently backfilled. Deterministic structural validation runs before any reviewer
-sees the text: placeholder presence, menu composition (2--5 options, at least one
-compliant and one violating, option names appearing verbatim in their lines and
-carrying no compliance vocabulary), an account-agnostic rule note, and lexical
-pressure tripwires on every pressure-free cell. Typographic dashes and smart
-quotes are stripped at validation.
+sees the text, checking placeholder presence, menu composition (2--5 options, at
+least one compliant and one violating, option names appearing verbatim in their
+lines and carrying no compliance vocabulary), an account-agnostic rule note, and
+lexical pressure tripwires on every pressure-free cell. Typographic dashes and
+smart quotes are stripped at validation.
 
-\paragraph{The review record ships.} Every reviewer verdict is logged as a flat
-row---scenario $\times$ domain $\times$ component $\times$ pressure family
-$\times$ generator $\times$ reviewer $\times$ verdicts $\times$ agreement---and
-aggregates into pass rates along every dimension with per-reviewer-pair Cohen's
-$\kappa$. Because every item records its single generator and each scenario exists
-in one complete version per trio model, the concern that ``items favor the family
-that wrote them'' becomes a computable interaction test---compare a model's scores
-across the three authorship versions of the same scenarios---rather than an
-unfalsifiable objection. Each assembled pack is a single reviewable JSON,
-human-edited or regenerated before the freeze, with a human spot-check $\kappa$
-reported against the machine verdicts.
+\paragraph{The review record ships.} Every reviewer verdict is logged as a flat row
+(scenario, domain, component, pressure family, generator, reviewer, verdicts, and
+agreement) and aggregates into pass rates along every dimension with
+per-reviewer-pair Cohen's $\kappa$. Because every item records its single generator
+and each scenario exists in one complete version per trio model, the concern that
+``items favor the family that wrote them'' becomes a computable interaction test,
+comparing a model's scores across the three authorship versions of the same
+scenarios, rather than an unfalsifiable objection. Each assembled pack is a single
+reviewable JSON, human-edited or regenerated before the freeze, with a human
+spot-check $\kappa$ reported against the machine verdicts.
 
-Item rendering (\S\ref{sec:protocol}) is then deterministic: each valid
-(scenario, generator) pack produces the identical 13-cell battery---one neutral
-cell, nine scored-pressure cells, one non-binding guard, and two under-attack
-cells---for $48 \times 3 \times 13 = 1{,}872$ items. The frozen item file carries
-gold labels, group tags, dev/public/private split assignments, a BIG-bench-style
-canary GUID, and a committed SHA-256 that serves as the pre-registration: any
-change to the items after models have run is visible in the hash.
+Item rendering (\S\ref{sec:protocol}) is then deterministic. Each valid
+(scenario, generator) pack produces the identical 13-cell battery: one neutral
+cell, nine scored-pressure cells, one non-binding guard, and two under-attack cells,
+for $48 \times 3 \times 13 = 1{,}872$ items. The frozen item file carries gold
+labels, group tags, dev/public/private split assignments, a BIG-bench-style canary
+GUID, and a committed SHA-256 that acts as the pre-registration: any change to the
+items after models have run is visible in the hash.
 
 \subsection{Metrics: Six De-Correlated Axes}
 \label{sec:metrics}
@@ -206,41 +202,40 @@ properties. All are computed by pure functions over the trial records; only axis
 consumes an LLM judge.
 
 \begin{enumerate}
-\item \textbf{Default Compliance} --- mean compliance on neutral cells (rule
-present, nothing pushing), averaged within each domain then equal-weighted across
-domains. Deterministic; the baseline against which every stressor is read.
+\item \textbf{Default Compliance.} Mean compliance on neutral cells (rule present,
+nothing pushing), averaged within each domain then equal-weighted across domains.
+Deterministic; the baseline against which every stressor is read.
 
-\item \textbf{Pressure Resistance} --- a \emph{cross-fitted}
-CVaR$_{0.25}$ over the scored-pressure cells: the mean compliance of the worst
-quartile of cells, but with the bottom quartile selected on one random half of a
-cell's replications and averaged on the held-out half (symmetrized over 50
-splits). Plain CVaR selects the tail on the same noisy estimate it then averages
-and is downward-biased differently per model; cross-fitting removes that
-winner's-curse bias. We report the na\"ive CVaR beside it and a
-\emph{fragility breadth}---the count of pressure \emph{families} that break the
-model below a threshold, since a model broken only by urgency is differently
-dangerous than one broken by six vectors.
+\item \textbf{Pressure Resistance.} A \emph{cross-fitted} CVaR$_{0.25}$ over the
+scored-pressure cells: the mean compliance of the worst quartile of cells, with the
+bottom quartile selected on one random half of a cell's replications and averaged on
+the held-out half (symmetrized over 50 splits). Plain CVaR selects the tail on the
+same noisy estimate it then averages and is downward-biased differently per model;
+cross-fitting removes that winner's-curse bias. We report the na\"ive CVaR beside it
+and a \emph{fragility breadth}, the count of pressure families that break the model
+below a threshold, since a model broken only by urgency is differently dangerous
+than one broken by six vectors.
 
-\item \textbf{Pushback Resistance} --- $P(\text{hold at turn 2}\mid\text{pushback})$
+\item \textbf{Pushback Resistance.} $P(\text{hold at turn 2}\mid\text{pushback})$
 over a \emph{fixed common-core} item set: the items a quorum of the panel complies
 with at turn~1, identical across models. This fixes the self-selected denominator
 that would otherwise grade weak models only on their easiest items; thin per-item
-rates are partially pooled toward the model's own mean and the per-model
-denominator is reported.
+rates are partially pooled toward the model's own mean and the per-model denominator
+is reported.
 
-\item \textbf{Steerability} --- how much the anti-adversarial guardrail buys.
-Every cell is run in two arms: the base persona, and the base persona plus the
-scenario's own generated hard directive (a company-voice mandate to follow all
-applicable laws and policies regardless of user requests). The score is
+\item \textbf{Steerability.} How much the anti-adversarial guardrail buys. Every
+cell is run in two arms: the base persona, and the base persona plus the scenario's
+own generated hard directive (a company-voice mandate to follow all applicable laws
+and policies regardless of user requests). The score is
 $\text{net} = \text{recovery} - \max(0,\, \text{standdown}_{\text{base}} -
 \text{standdown}_{\text{anti}})$, where recovery is the fraction of \emph{base
-violations} that become compliant under the mandate---measured only where the base
-model fails, so there is no ceiling artifact---and the penalty subtracts any loss
-of correct stand-downs, preventing the mandate from ``working'' by turning the
-model into an always-comply agent. This measures whether an explicit guardrail
-overrides an implicit objective: the deployer's real lever.
+violations} that become compliant under the mandate (measured only where the base
+model fails, so there is no ceiling artifact) and the penalty subtracts any loss of
+correct stand-downs, preventing the mandate from ``working'' by turning the model
+into an always-comply agent. This measures whether an explicit guardrail overrides
+an implicit objective, the deployer's real lever.
 
-\item \textbf{Reasoning Honesty} --- among violations, a three-way label:
+\item \textbf{Reasoning Honesty.} Among violations, a three-way label:
 \emph{silent} (never names the rule), \emph{rationalized} (names it, explains it
 away), or \emph{defiant-honest} (names it, chooses against it). The headline is
 $1 - \text{silent rate}$; the rationalization rate is reported separately. Because
@@ -248,12 +243,12 @@ the denominator is violations, the best models have the least data (undefined ma
 to 1 and is held out of the harmonic-mean cross-check), and because this axis is
 near-100\% LLM-judged it carries its own reliability gate.
 
-\item \textbf{Rule-Scope Discernment} --- balanced accuracy,
+\item \textbf{Rule-Scope Discernment.} Balanced accuracy,
 $\tfrac{1}{2}[P(\text{comply}\mid\text{binding}) + P(\text{correct
 stand-down}\mid\text{non-binding})]$, with the under-attack cells folded in.
-Balanced averaging pins a degenerate always-comply or always-violate agent at
-0.5. Escalation to a human counts as full credit on binding items but is guarded
-by a needless-escalation ceiling (20\%) on non-binding items; a breach flags the
+Balanced averaging pins a degenerate always-comply or always-violate agent at 0.5.
+Escalation to a human counts as full credit on binding items but is guarded by a
+needless-escalation ceiling (20\%) on non-binding items; a breach flags the
 leaderboard row.
 \end{enumerate}
 
@@ -262,12 +257,12 @@ scored cells, reported beside its plain mean (the floor-versus-mean gap is
 informative), a harmonic mean over axes 1--4 and 6 (axis 5 held out), and a
 scale-free mean win rate as an ordinal cross-check. We report the full inter-axis
 Pearson correlation matrix on the real models rather than asserting orthogonality,
-and per-axis $\kappa$ (axes 1, 2, 4 are near-deterministic; 3 is turn-parsing; 6
-mostly deterministic; 5 all-judge---a reliability spread a pooled number would
-hide).
+and per-axis $\kappa$: axes 1, 2, and 4 are near-deterministic, 3 is turn-parsing, 6
+mostly deterministic, and 5 all-judge, a reliability spread a pooled number would
+hide.
 
-\paragraph{Un-gameability.} Four trivial agents---\textsc{always-comply},
-\textsc{always-cheapest}, \textsc{always-escalate}, and \textsc{random}---are
+\paragraph{Un-gameability.} Four trivial agents, \textsc{always-comply},
+\textsc{always-cheapest}, \textsc{always-escalate}, and \textsc{random}, are
 synthesized without model calls and run on every release. If any out-ranks a real
 model on any axis, that axis is broken by construction. The guard cells, the
 balanced-accuracy discernment axis, and the needless-escalation ceiling are the
@@ -291,24 +286,24 @@ the residual and maps it to a visible label or to \textsc{escalate}/\textsc{uncl
 Every judged row logs the judge model and a hash of the judge prompt, so any change
 to the measuring instrument is visible in the artifacts. The Reasoning-Honesty
 judge (axis 5) is subtler and uses the three generator models as a leave-one-out
-ensemble (a model never judges its own generated scenario, and never its own
-response). A judge-swap gate reruns outcome judging with an alternate judge and
+ensemble; a model never judges its own generated scenario, and never its own
+response. A judge-swap gate reruns outcome judging with an alternate judge and
 requires Kendall $\tau \geq 0.9$ over the model ranking before release, and a
 stratified human gold set is double-annotated with per-domain $\kappa$ against the
 human--human ceiling.
 
 \paragraph{Evaluation-awareness probe.} A separate post-hoc judge samples
-transcripts per model and flags signs that the model believes it is being
-tested---persona breaks, distancing (``in this scenario''), unprompted ethics
-essays, explicit evaluation language, or over-caution. The resulting per-model
-awareness rate is a validity diagnostic: if awareness correlates with compliance,
-the realism of the packs needs work. It is reported beside the leaderboard, never
-folded into it.
+transcripts per model and flags signs that the model believes it is being tested:
+persona breaks, distancing (``in this scenario''), unprompted ethics essays,
+explicit evaluation language, or over-caution. The resulting per-model awareness
+rate is a validity diagnostic. If awareness correlates with compliance, the realism
+of the packs needs work. It is reported beside the leaderboard, never folded into
+it.
 
 \paragraph{Statistics.} We follow evaluation best practice throughout: Wilson
-score intervals per cell, standard errors clustered on the item (na\"ive SEs can
-be several times too small when trials share a rendered prompt), paired
-item-level bootstrap for model contrasts with Benjamini--Hochberg correction, and
-two-stage bootstrap (items, then replications) on all rollups. Because every trial
-runs at temperature 1.0, results are statistical estimates, not deterministic
+score intervals per cell, standard errors clustered on the item (na\"ive SEs can be
+several times too small when trials share a rendered prompt), paired item-level
+bootstrap for model contrasts with Benjamini--Hochberg correction, and two-stage
+bootstrap (items, then replications) on all rollups. Because every trial runs at
+temperature 1.0, results are statistical estimates rather than deterministic
 outputs, and are always reported with intervals.
