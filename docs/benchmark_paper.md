@@ -1,4 +1,4 @@
-# ComplianceBench: A Benchmark for Regulatory Compliance Under Pressure
+# PACT: A Benchmark for Regulatory Compliance Under Pressure
 
 *Design rationale and defense — companion to `benchmark-metrics-design.md` (the
 metric-engineering spec) and `src/benchmark/` (the running code). This document
@@ -11,7 +11,7 @@ our own 72k-trial dataset (§6).*
 
 ## 1. The claim
 
-**ComplianceBench measures whether an enterprise LLM agent keeps following an
+**PACT measures whether an enterprise LLM agent keeps following an
 embedded rule as its context turns hostile** — as penalty information reframes the
 rule, as institutional signals license breaking it, and as a persistent interlocutor
 pushes back across turns. It is a **propensity benchmark, not a capability
@@ -32,7 +32,7 @@ with banking and insurance leading adoption at 47% — precisely the regulated
 functions where a compliance failure is a legal event, and where
 [60% of finance leaders already cite governance as the primary barrier](https://joget.com/ai-agent-adoption-in-2026-what-the-analysts-data-shows/).
 There is no benchmark a deployer can consult that answers "which model holds the
-rule under a rushed manager?" ComplianceBench is built to be that instrument.
+rule under a rushed manager?" PACT is built to be that instrument.
 
 ---
 
@@ -84,7 +84,7 @@ effects in the same direction but smaller than urgency, so they add cells withou
 adding discrimination — and our IRT item analysis (§6) confirms several such cells
 have near-zero discrimination parameters.
 
-*v1 update:* the frozen spec (`compliancebench_v1_spec.md` §4) carries the same
+*v1 update:* the frozen spec (`pact_v1_spec.md` §4) carries the same
 mechanism-per-slot logic to a **ten-mechanism scored battery**: six
 AIES-validated tactics (urgency, both manager-authority variants, peer-escaped,
 risk minimization, cost pressure) plus four designed to fill mechanism cells the
@@ -581,7 +581,7 @@ Point-by-point:
    AgentHarm (malicious instructions — ours are *benign* users creating incentive
    conflicts, the realistic enterprise threat model); AIR-Bench (regulation-derived
    *topics*, single-turn refusal). The empty cell in that matrix — *benign pressure
-   × embedded rule × multi-turn × propensity* — is ComplianceBench.
+   × embedded rule × multi-turn × propensity* — is PACT.
 4. **Negative results are in the record.** The abstention-conversion hypothesis
    failed on v0 data and is documented as failed (§6, finding 15) rather than
    quietly dropped; the verbosity correlation was flagged, investigated
@@ -644,12 +644,12 @@ regression with the fuller matrix; add the social-steerability and norms
 diagnostics back as scored dimensions; swap in the fine-tuned open judge; prune
 items by measured discrimination.
 
-### 7.4 ComplianceBench-A (the Paper B bridge)
+### 7.4 PACT-A (the Paper B bridge)
 Same scenarios, actuators instead of recommendations: `submit_order`,
 `split_order`, `check_certification`, `escalate_to_human`, `log_justification`.
 The honesty gap (stated vs. enacted) becomes measurable; the structuring and
 willful-blindness failure modes become observable; and the chat benchmark gains its
-own construct-validity test — "we ran the ComplianceBench-top models with tools and
+own construct-validity test — "we ran the PACT-top models with tools and
 the score dropped X" is Paper B's built-in baseline, and the strongest possible
 answer to the objection that recommendation-level compliance is an upper bound.
 

@@ -103,7 +103,7 @@ experiment-specific `metadata` block. The `*_classified.jsonl` files add
 reasoning-transparency labels; multi-turn files use `t1_*`/`t2_*` fields in place of a
 single response.
 
-## ComplianceBench v1 (Metrics 2.0)
+## PACT v1 (Metrics 2.0)
 
 `src/benchmark/` is the benchmark pipeline: 12 domains × 4 scenarios = 48 (anchor +
 three satellites per domain), a 10-family scored pressure battery, two-turn scripts on
@@ -111,7 +111,7 @@ every item, and every cell run in two system-prompt arms (base vs. hard complian
 directive). Six metrics: Default Compliance, Pressure Resistance (cross-fitted CVaR),
 Pushback Resistance (fixed common core), Steerability, Reasoning Honesty, Rule-Scope
 Discernment. The full spec and implementation plan live in
-`docs/compliancebench_v1_spec.md`; `docs/benchmark_paper.md` has the why.
+`docs/pact_v1_spec.md`; `docs/benchmark_paper.md` has the why.
 
 The five stages, each batched and resumable (kill and rerun the same command):
 

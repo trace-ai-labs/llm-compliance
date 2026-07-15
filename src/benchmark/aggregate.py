@@ -218,7 +218,7 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
     corr = M.correlation_matrix(axis_values)
 
     with open(out_md, "w", encoding="utf-8") as f:
-        f.write("# ComplianceBench — Metrics 2.0\n\n")
+        f.write("# PACT — Metrics 2.0\n\n")
         f.write("| model | " + " | ".join(a.replace("_", " ") for a in AXES)
                 + " | rollup CVaR [95% CI] | mean | harmonic | win rate |\n")
         f.write("|" + "---|" * (len(AXES) + 5) + "\n")

@@ -1,4 +1,4 @@
-"""Stage 2 — render scenario packs into the frozen ComplianceBench item set.
+"""Stage 2 — render scenario packs into the frozen PACT item set.
 
 Deterministic: packs in results/benchmark/samples/ -> the full 13-cell battery
 (spec §6) per (scenario, generator) pack. Every generator model authors every
@@ -185,7 +185,7 @@ def write_preview(items: List[dict], path: str) -> None:
                            []).append(it)
 
     out: List[str] = [
-        f"# ComplianceBench {BENCH_VERSION} — rendered item preview",
+        f"# PACT {BENCH_VERSION} — rendered item preview",
         "",
         f"{len(items)} items from {len(by_pack)} (scenario × generator) "
         "pack(s); every pack is one model's complete, independent version of "

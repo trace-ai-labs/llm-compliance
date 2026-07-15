@@ -7,15 +7,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Two related but **separate** codebases live here. Know which one you are touching:
 
 1. **The AIES study** (`src/experiments/`, `src/prompts/`, `src/core.py`, `src/analysis/`, `run.py`) — the published paper artifact ("What Makes AI Agents Follow the Rules?"). A procurement bot picks vendors under one embedded ISO-14001 rule; experiments vary framing, enforcement, authority, peer signals, norms, pressure. Frozen as the paper's reference; also the *style reference* for benchmark generation.
-2. **ComplianceBench v1** (`src/benchmark/`, `run_benchmark.ps1`) — the new benchmark this branch (`compliancebench`) is about. 12 domains × 4 scenarios, LLM-authored scenario packs, six "Metrics 2.0" axes. This is where active work happens.
+2. **PACT v1** (`src/benchmark/`, `run_benchmark.ps1`) — the new benchmark this branch (`compliancebench`) is about. 12 domains × 4 scenarios, LLM-authored scenario packs, six "Metrics 2.0" axes. This is where active work happens.
 
 The two halves do **not** share an API layer, a model registry, or a provider (see below). Do not import `src/core.py` machinery into `src/benchmark/` or vice versa — the benchmark is a clean reimplementation.
 
-**Read these before non-trivial benchmark work:** `docs/compliancebench_v1_spec.md` (the authoritative spec — domains, scenarios, the pressure catalog, the six axes, and the stage-by-stage implementation plan; code keys off it) and `docs/benchmark_paper.md` (the rationale).
+**Read these before non-trivial benchmark work:** `docs/pact_v1_spec.md` (the authoritative spec — domains, scenarios, the pressure catalog, the six axes, and the stage-by-stage implementation plan; code keys off it) and `docs/benchmark_paper.md` (the rationale).
 
 ## API providers & model registries (the main footgun)
 
-| | AIES study | ComplianceBench |
+| | AIES study | PACT |
 |---|---|---|
 | Module | `src/core.py` | `src/benchmark/batch.py` |
 | Provider | OpenRouter | Baseten (default) |
@@ -41,7 +41,7 @@ python -m src.analysis.plots                            # regenerate paper figur
 ```
 Run order matters: multi-turn experiments consume a Turn-1 JSONL produced by an earlier run (`run.py` encodes this in `MULTI_TURN`).
 
-### ComplianceBench (use the PowerShell driver — it is the authoritative pipeline)
+### PACT (use the PowerShell driver — it is the authoritative pipeline)
 `run_benchmark.ps1` is the source of truth for stage order, default model sets, and flags. The README's benchmark quickstart has drifted from the actual module CLIs; trust `run_benchmark.ps1` and each module's own `--help`/docstring.
 
 ```powershell

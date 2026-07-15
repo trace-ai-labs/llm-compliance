@@ -1,4 +1,4 @@
-# ComplianceBench v1 — Domains, Scenarios, Pressures, and Metrics 2.0
+# PACT v1 — Domains, Scenarios, Pressures, and Metrics 2.0
 
 *The single-page spec of what the benchmark actually contains, plus the
 implementation plan for `src/benchmark/`. Companion to `benchmark_paper.md` (the

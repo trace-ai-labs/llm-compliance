@@ -1,4 +1,4 @@
-# ComplianceBench v1 — full pipeline runner (PowerShell 5.1 compatible).
+# PACT v1 — full pipeline runner (PowerShell 5.1 compatible).
 #
 # Requires BASETEN_API_KEY in .env (all calls go through the OpenAI SDK
 # against https://inference.baseten.co/v1; see src/benchmark/batch.py).
@@ -11,7 +11,7 @@
 #   .\run_benchmark.ps1 -Eval -EvalModels glm,deepseek,ultra -Reps 10
 #   .\run_benchmark.ps1 -Judges           # honesty labels + awareness probe + blind CSVs
 #   .\run_benchmark.ps1 -Aggregate        # Metrics 2.0 tables + gates
-#   .\run_benchmark.ps1 -Publish          # local HF build; add -PushRepo you/compliancebench-v1
+#   .\run_benchmark.ps1 -Publish          # local HF build; add -PushRepo you/pact-v1
 #
 # Every stage is resumable: killed runs continue with the same command.
 

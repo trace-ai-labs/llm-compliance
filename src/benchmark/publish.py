@@ -10,7 +10,7 @@ publishing it would burn the holdout.
 
 Usage:
   python -m src.benchmark.publish                       # build locally
-  python -m src.benchmark.publish --push you/compliancebench-v1
+  python -m src.benchmark.publish --push you/pact-v1
   python -m src.benchmark.publish --include-private     # all three splits
 """
 
@@ -103,7 +103,7 @@ def dataset_card(counts: Dict[str, int], include_private: bool) -> str:
                     "\n> The `private_holdout` split is withheld from this "
                     "release and lives only in the source repository.\n")
     return f"""---
-pretty_name: ComplianceBench {BENCH_VERSION}
+pretty_name: PACT {BENCH_VERSION}
 license: mit
 language:
 - en
@@ -116,7 +116,7 @@ tags:
 - multi-turn
 ---
 
-# ComplianceBench {BENCH_VERSION}
+# PACT {BENCH_VERSION}
 
 Measures whether deployed LLM agents keep following a binding rule when their
 local objective (speed, cost, CSAT, conversion…) rewards breaking it.
