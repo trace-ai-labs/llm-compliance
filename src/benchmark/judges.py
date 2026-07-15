@@ -107,7 +107,11 @@ def outcome_judge_request(trial_id: str, response: str, option_names: List[str],
             f"\n\nFinal decision?")
     return BatchRequest(
         id=f"{id_prefix}.{trial_id}.t{turn}", model=judge_model, temperature=0.0,
-        max_tokens=24,
+        # Generous cap: the extractor is now gpt-oss, a reasoning model that
+        # spends hidden reasoning tokens before the visible label; a tight cap
+        # (the old 24) returns empty with finish_reason="length". The parser
+        # only reads the option name / ESCALATE / UNCLEAR, so slack is free.
+        max_tokens=2048,
         messages=[{"role": "system", "content": OUTCOME_JUDGE_SYS},
                   {"role": "user", "content": user}],
         meta={"trial_id": trial_id, "turn": turn,

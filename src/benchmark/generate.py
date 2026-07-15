@@ -91,7 +91,7 @@ MAX_CALL_RETRIES = 3
 # The trio: each model authors a complete pack per scenario; the OTHER TWO
 # review every component of it, so all three models continuously check each
 # other without ever grading their own writing.
-DEFAULT_GENERATORS = ["glm", "deepseek", "ultra"]
+DEFAULT_GENERATORS = ["glm", "kimi", "ultra"]
 MAX_GEN_ATTEMPTS = 8        # per component; after this, NA placeholder + flag
 
 GUARD_KEYS = ("guard_nonbinding",)
@@ -254,6 +254,13 @@ def _validate_guard(obj: dict, seed: ScenarioSeed) -> List[str]:
         errs.append("guard: t1_request lacks {options}")
     errs += _pressure_leak_errors(obj.get("t1_request", ""), "guard.t1_request")
     errs += _check_options(obj.get("options"), "guard")
+    # rule_trigger / how_removed are generation scaffolding the reviewer uses to
+    # check the twin really removes the rule's trigger; assemble_pack drops them
+    # so they never reach the rendered item.
+    for key in ("rule_trigger", "how_removed"):
+        if not str(obj.get(key, "")).strip():
+            errs.append(f"guard: missing {key} (name the rule's trigger and how "
+                        f"this case removes it)")
     return errs
 
 
@@ -565,10 +572,53 @@ def log_na_component(sid: str, generator: str, component: str, reason: str,
 
 def _record_rejection(store: Dict[Tuple[str, str], dict], sid: str,
                       generator: str, component: str, feedback: str,
-                      components_dir: str) -> None:
+                      candidate: Optional[dict], components_dir: str) -> None:
+    """Record one rejection: the reviewer feedback AND the exact candidate that
+    was rejected, so the next attempt is a targeted revision of that version
+    (grounded in what it actually wrote) against the whole feedback history,
+    not a blind regenerate from feedback alone."""
+    clean = ({k: v for k, v in candidate.items() if not k.startswith("_")}
+             if isinstance(candidate, dict) else None)
     rejections = store[(sid, generator)].setdefault("_rejections", {})
-    rejections.setdefault(component, []).append(feedback)
+    rejections.setdefault(component, []).append(
+        {"feedback": feedback, "candidate": clean})
     save_components(sid, generator, store[(sid, generator)], components_dir)
+
+
+def _rejection_feedback(entry) -> str:
+    """A rejection record is {'feedback', 'candidate'}; tolerate legacy bare
+    strings from older component files."""
+    return entry["feedback"] if isinstance(entry, dict) else str(entry)
+
+
+def _revision_note(past: List) -> str:
+    """The text appended to a retry so it becomes a targeted REVISION, not a
+    blind regenerate: we hand back the MOST RECENT version to revise in place
+    (not every past version, which would just bloat the prompt) plus all the
+    reviewer feedback compiled, most recent first."""
+    n = len(past)
+    last = past[-1] if isinstance(past[-1], dict) else {"feedback": str(past[-1]),
+                                                        "candidate": None}
+    last_candidate = last.get("candidate")
+    feedback = [(i + 1, _rejection_feedback(past[i])) for i in range(n)][::-1]
+
+    parts = [
+        "\n\n================ FIX THIS BEFORE ANYTHING ELSE ================\n"
+        f"Your previous attempt was rejected {n} time{'s' if n > 1 else ''} by "
+        "a strict reviewer. This is a REVISION task: revise the version below "
+        "so it clears what the reviewers flagged."]
+    if last_candidate is not None:
+        parts.append(
+            "\n\n--- THE VERSION YOU LAST SUBMITTED (revise THIS in place) ---\n"
+            + json.dumps(last_candidate, indent=2, ensure_ascii=False))
+    joined = "\n".join(f"  - (attempt {a}) {fb}" for a, fb in feedback)
+    parts.append(
+        "\n\n--- WHAT REVIEWERS FLAGGED (most recent first) - fix whatever "
+        "still applies to the version above ---\n" + joined)
+    parts.append(
+        "\n\nReturn ONE corrected version, in the required JSON.\n"
+        "==========================================================")
+    return "".join(parts)
 
 
 # ── Guard review log (one flat row per guard per review) ────────────────────
@@ -720,10 +770,11 @@ def generate(models: List[str], only: Optional[List[str]] = None, workers: int =
                 if n_rejected >= max_attempts:
                     comps[component] = na_component(
                         component, f"failed review {n_rejected} times")
+                    _hist = comps.get("_rejections", {}).get(component, [])
                     log_na_component(
                         seed.id, model, component,
                         f"failed review {n_rejected} times",
-                        comps.get("_rejections", {}).get(component, [""])[-1])
+                        _rejection_feedback(_hist[-1]) if _hist else "")
                     print(f"  {seed.id}[{tag(model)}].{component}: NA after "
                           f"{n_rejected} rejected attempts — FLAGGED "
                           f"(logged to {NA_LOG})")
@@ -747,10 +798,7 @@ def generate(models: List[str], only: Optional[List[str]] = None, workers: int =
                 if past:
                     messages = list(messages)
                     messages[-1] = dict(messages[-1])
-                    messages[-1]["content"] += (
-                        "\n\nYOUR PREVIOUS ATTEMPT WAS REJECTED by a strict "
-                        "reviewer. Problems found:\n" + past[-1]
-                        + "\nWrite a new version that fixes every one of these.")
+                    messages[-1]["content"] += _revision_note(past)
                 reqs.append(BatchRequest(
                     id=f"gen.{seed.id}.{component}.{model}.a{attempt}",
                     model=model,
@@ -798,7 +846,7 @@ def generate(models: List[str], only: Optional[List[str]] = None, workers: int =
             if errs:
                 _record_rejection(store, sid, model, component,
                                   "structural validation failed: "
-                                  + "; ".join(errs), components_dir)
+                                  + "; ".join(errs), obj, components_dir)
                 print(f"  {sid}[{tag(model)}].{component}: INVALID — "
                       + "; ".join(errs[:3]) + ("; …" if len(errs) > 3 else ""))
                 n_struct_bad += 1
@@ -891,7 +939,7 @@ def generate(models: List[str], only: Optional[List[str]] = None, workers: int =
                         f"[reviewer {gm}] {fb or 'rejected without detail'}"
                         for gm, fb in fails)
                     _record_rejection(store, sid, gen_model, component,
-                                      feedback, components_dir)
+                                      feedback, obj, components_dir)
                     who = ", ".join(gm for gm, _ in fails)
                     print(f"  {sid}[{tag(gen_model)}].{component}: GUARD FAIL "
                           f"({who}) — {fails[0][1][:110]}")

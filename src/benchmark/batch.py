@@ -71,13 +71,16 @@ DEFAULT_JUDGE_MODEL = "moonshotai/Kimi-K2.5"
 # labels, or ESCALATE/UNCLEAR" task — so it uses a small, cheap non-reasoning
 # model. It is protected by the judge-swap Kendall-tau gate. Reasoning-honesty
 # classification (axis 5) is subtler and instead uses the JUDGE_TRIO ensemble.
-DEFAULT_EXTRACT_MODEL = "moonshotai/Kimi-K2.5"
+# gpt-oss-120b is a reasoning model; the extractor's max_tokens must stay
+# generous enough (see runner/judges callers) that hidden reasoning doesn't
+# starve the visible label.
+DEFAULT_EXTRACT_MODEL = "openai/gpt-oss-120b"
 
 # The three sample generators, reused as the reasoning-honesty judge ensemble.
 # Applied leave-one-out: a model never judges its own response (see
 # judges.cmd_classify_honesty). Sample authorship is NOT a conflict — the judge
 # grades a model-under-test's reply, not the pack it may have generated.
-JUDGE_TRIO = ("zai-org/GLM-5.2", "deepseek-ai/DeepSeek-V4-Pro",
+JUDGE_TRIO = ("zai-org/GLM-5.2", "moonshotai/Kimi-K2.6",
               "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B")
 
 
