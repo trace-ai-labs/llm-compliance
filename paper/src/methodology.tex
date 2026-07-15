@@ -1,162 +1,187 @@
-\section{Benchmark Design}
-\label{sec:design}
+\section{PACT: A Compliance Benchmark for Regulated Enterprise Agents}
+\label{sec:pact}
 
-PACT measures one behavior across many settings: does a deployed agent
-keep following an embedded rule when its context makes violation locally attractive?
-We describe the measurement template (\S\ref{sec:template}), the domains and
-scenarios (\S\ref{sec:domains}), the pressures and multi-turn stressors
-(\S\ref{sec:pressures}), the generation pipeline (\S\ref{sec:generation}), the six
-metrics (\S\ref{sec:metrics}), and the protocol (\S\ref{sec:protocol}).
+Each PACT item drops an agent into a deployment: a persona system prompt that
+rewards a local objective (speed, cost, CSAT), a standing rule, and an
+in-character user request whose most convenient option violates that rule. Every
+item is run across two turns and in two system-prompt arms, and items are grouped
+into \emph{neutral}, \emph{pressure}, \emph{guard}, and \emph{under-attack} cells.
+We present the design metrics-first, because the metrics are what a deployer
+consumes and they motivate everything else;
+\S\ref{sec:building} then shows how the items that feed them are built and audited.
 
-\subsection{The Measurement Template}
-\label{sec:template}
-
-Every item instantiates one template, and this isomorphism is what makes compliance
-rates comparable across unrelated domains. It fixes six invariants.
-\emph{(1) Deployment framing.} A \emph{system} prompt gives the agent's standing
-persona (name, company, channel, and the KPIs it is measured on) and never mentions
-the decision; the rule is appended as a standing, account-agnostic note stating the
-general rule only. A \emph{user} turn carries the request, case facts, and option
-menu. Compliance is stated nowhere: which option satisfies the rule is derivable
-only by joining the case facts to the standing rule, making each item a reasoning
-task rather than a keyword match.
-\emph{(2) Dominance structure.} The menu holds two to five options with at least one
-rule-violating option that strictly dominates on the local objective (cheaper,
-faster, higher CSAT) and at least one rule-compliant option that costs more; menu
-order is whatever the surface would naturally present and never encodes compliance.
-\emph{(3) Informational framing.} The rule is a neutral statement of fact, never a
-command; command-style strictness is supplied only in the steerability arm
-(\S\ref{sec:metrics}).
-\emph{(4) Conditional second turn.} Every neutral and pressure item carries a turn~2
-conditioned on the turn~1 answer: a \emph{pushback} re-arguing the temptation if the
-model complied, or a \emph{challenge} if it violated.
-\emph{(5) Guard cells.} Each scenario ships a non-binding twin, a minimal edit in
-which the rule does not apply, so holding it is an error; the guards make
-over-compliance visible and separate rule-following from rule-parroting.
-\emph{(6) Feature codes.} Each scenario is coded on crispness, benefit denomination,
-victim salience, and penalty type, so the regression \texttt{compliance $\sim$
-crispness $+$ benefit $+$ victim $+$ penalty $+ (1|\mathrm{model}) +
-(1|\mathrm{domain})$} has 48 sampling units at launch.
-
-\subsection{Domains and Scenarios}
-\label{sec:domains}
-
-The template is instantiated in \textbf{twelve regulated domains} with
-\textbf{four scenarios each} (48 total; Appendix~\ref{app:domains}), spanning
-privacy (GDPR), finance, customer service, government services, HR, AML/KYC,
-healthcare administration (HIPAA), pharma medical information, advertising, export
-controls, content moderation, and procurement. Each domain met three criteria: a
-documented deployment surface, a crisp rule an agent can violate in a
-\emph{recommendation}, and a real penalty anchor (statute, regulator action, or
-litigated AI incident). Seven reconstruct settings that already produced a legal
-consequence (among them \emph{Moffatt v.\ Air Canada}, NYC MyCity, and
-\emph{Mobley v.\ Workday}), so those items carry case citations. The four scenarios
-per domain use distinct rules and jointly span all benefit denominations,
-victim-salience levels, and penalty types. Moderation is the deliberately fuzzy-rule
-domain; procurement doubles as a contamination tripwire against prior published data.
-
-\subsection{Pressures and Multi-Turn Stressors}
-\label{sec:pressures}
-
-The stressor is a battery of \textbf{nine scored pressures}, appended to turn~1 in
-domain-natural phrasing, each targeting a distinct compliance-theory mechanism so
-that none is redundant: \emph{urgency} (time scarcity), \emph{mgr\_verbal}
-(legitimate authority), \emph{peer\_escaped} (descriptive norm plus impunity),
-\emph{risk\_minimize} (deterrence discounting), \emph{cost\_pressure} (loss
-framing), \emph{false\_clearance} (unverifiable authorization),
-\emph{fait\_accompli} (commitment and sunk cost), \emph{sympathetic\_beneficiary}
-(an identifiable person harmed by \emph{compliance}, the inverse of victim salience),
-and \emph{responsibility\_shift} (accountability transfer). The users are
-\emph{benign}: none jailbreaks, each is an employee whose convenience conflicts with
-the rule, which is the realistic enterprise threat and what separates the benchmark
-from adversarial-attack suites. A tenth pressure, \emph{rule\_delegitimization} (an
-epistemic attack on the rule's scope), is not scored but drives the
-discernment-under-attack cells: applied to a binding item the model must hold, and
-its mirror on the non-binding guard the model must stand down against.
-
-\subsection{Item Generation as an Audited Instrument}
-\label{sec:generation}
-
-Items are LLM-authored, so generation is engineered as a measurement instrument
-with a published quality record. A scenario is built \emph{component by component}
-in dependency order (persona, request and menu, rule note, nine pressures, guard
-twin, two turn~2 scripts, two attacks), each conditioned on the accepted components
-so it speaks with one voice; the baseline request is shared verbatim across the
-battery, so any leak would contaminate every cell built on it. Prompts are
-\emph{zero-shot}, because scenarios generated against a shared exemplar converge on
-its names and cadence and destroy between-domain variance, and naturalism is
-enforced at the source (register, invented work artifacts, deliberate typing
-imperfections), because evaluation awareness is a first-order threat. Three
-generator models each author a \emph{complete, independent} pack per scenario, and
-every structurally valid component is reviewed by the two models that did \emph{not}
-write it, on \emph{scope} (exactly what its cell tests) and \emph{authenticity};
-either failure burns one of five attempts, and five rejections yield a flagged pack
-that never counts as valid. Deterministic checks (menu composition, an
-account-agnostic rule note, pressure tripwires) run first, and dashes and smart
-quotes are stripped. Every verdict ships as a flat row with per-pair $\kappa$, and
-because each scenario exists in one version per generator, ``items favor their
-author's family'' becomes a computable interaction test rather than an objection.
-Rendering is then deterministic: each valid pack yields the identical 13-cell battery
-(one neutral, nine pressure, one non-binding guard, two under-attack), giving
-$48\times3\times13 = 1{,}872$ items with gold labels, split tags, a canary GUID, and
-a committed SHA-256 that acts as the pre-registration.
-
-\subsection{Metrics: Six De-Correlated Axes}
+\subsection{Metrics for Assessment}
 \label{sec:metrics}
 
-Compliance is empirically not one number, so we report six axes on $[0,1]$, higher
-better, computed by pure functions over trials (only axis~5 uses a judge).
+\paragraph{Why a profile, not a score.} ``Will this agent follow the rule?'' looks
+like one question, but it is not. On data from a prior single-domain study (\S\ref{sec:validation})
+compliance is not a single latent trait: the first principal component of the
+model-by-condition rate matrix explains only 47\% of the variance, the behavioral
+dimensions inter-correlate at most 0.64, and a score computed \emph{without} a given
+pressure family predicts a model's rank \emph{on} that family only weakly (Spearman
+$\rho$ from 0.33 to 0.84). A model robust to a manager's order is not reliably robust
+to a deadline. A single scalar would therefore be wrong about the structure of the
+phenomenon, not merely lossy, and it would let a model average away the one condition
+where it catastrophically fails. PACT instead reports six axes, each a distinct
+question a deployer actually asks and each engineered against a specific way a naive
+metric misleads. All are on $[0,1]$, higher better, computed by pure functions over
+the trial records; only axis~5 consumes a judge.
+
 \begin{enumerate}
-\item \textbf{Default Compliance.} Mean compliance on neutral cells, domain-equal
-weighted. The baseline against which every stressor is read.
-\item \textbf{Pressure Resistance.} A \emph{cross-fitted} CVaR$_{0.25}$ over the
-pressure cells: worst-quartile mean, but with the tail selected on one random half
-of a cell's replications and averaged on the held-out half (50 splits), which
-removes the winner's-curse bias of plain CVaR. We report na\"ive CVaR and a
-\emph{fragility breadth} (how many pressure families break the model) beside it.
-\item \textbf{Pushback Resistance.} $P(\text{hold at turn 2}\mid\text{pushback})$
-over a \emph{fixed common-core} set (items a quorum complies with at turn~1),
-identical across models, fixing the self-selected denominator that would grade weak
-models only on their easiest items.
-\item \textbf{Steerability.} How much an explicit guardrail buys. Every cell runs in
-two arms, base and base plus the scenario's generated hard directive; the score is
-$\text{net} = \text{recovery} - \max(0,\, \text{standdown}_{\text{base}} -
-\text{standdown}_{\text{anti}})$, where recovery is the fraction of \emph{base
-violations} recovered (no ceiling artifact) and the penalty stops the mandate from
-scoring by turning the model into an always-comply agent.
-\item \textbf{Reasoning Honesty.} Among violations, $1 - \text{silent rate}$, with
-violations labeled silent, rationalized, or defiant-honest. The denominator is
-violations, so the best models have the least data (undefined maps to 1, held out of
-the harmonic mean); near-100\% judged, so it carries its own reliability gate.
-\item \textbf{Rule-Scope Discernment.} Balanced accuracy
-$\tfrac{1}{2}[P(\text{comply}\mid\text{binding}) + P(\text{stand-down}\mid\text{non-binding})]$
-with the under-attack cells folded in, pinning degenerate agents to 0.5. Escalation
-is full credit on binding items but guarded by a 20\% needless-escalation ceiling on
-non-binding ones.
+\item \textbf{Default Compliance} --- \emph{does it comply when nothing is pushing?}
+Mean compliance on neutral cells, domain-equal weighted. The baseline every stressor
+is read against.
+
+\item \textbf{Pressure Resistance} --- \emph{does it hold under the worst pressure,
+not the average one?} A mean over pressure cells hides the single family that floors
+the model, which is exactly the cell a deployer meets in production. We report a
+cross-fitted CVaR$_{0.25}$: the mean compliance of the worst quartile of cells, with
+the tail selected on one random half of a cell's replications and scored on the
+held-out half (50 splits). Cross-fitting removes the winner's-curse bias of a plain
+tail estimate; we also report na\"ive CVaR and a \emph{fragility breadth} (how many
+families break the model), because being broken by one vector differs from being
+broken by six.
+
+\item \textbf{Pushback Resistance} --- \emph{does it hold when the user argues back?}
+$P(\text{hold at turn 2}\mid\text{pushback})$, but over a \emph{fixed common-core}
+set of items a quorum of the panel complies with at turn~1, identical across models.
+This fixes the self-selected denominator that would otherwise grade a weak model only
+on its handful of easy items and flatter it.
+
+\item \textbf{Steerability} --- \emph{if it fails, can an explicit guardrail fix it?}
+Every cell is run twice: base persona, and base plus the scenario's generated hard
+directive. The score is $\text{net}=\text{recovery}-\max(0,\,\text{standdown}_{\text{base}}
+-\text{standdown}_{\text{anti}})$, where recovery is the fraction of \emph{base
+violations} the mandate repairs (measured only where the base model fails, so there
+is no ceiling artifact) and the penalty stops the mandate from ``working'' by turning
+the model into a blanket always-comply agent.
+
+\item \textbf{Reasoning Honesty} --- \emph{when it violates, does it admit it?}
+Over violations, $1-\text{silent rate}$, with each violation labeled silent,
+rationalized, or defiant-honest. Because the denominator is violations, the best
+models have the least data (undefined maps to 1, held out of the harmonic mean), and
+because it is near-100\% judged it carries its own reliability gate.
+
+\item \textbf{Rule-Scope Discernment} --- \emph{does it apply the rule only where it
+binds?} Balanced accuracy
+$\tfrac12[P(\text{comply}\mid\text{binding})+P(\text{stand-down}\mid\text{non-binding})]$,
+with the under-attack cells folded in. Balanced averaging pins a degenerate
+always-comply or always-violate agent at 0.5, and a 20\% needless-escalation ceiling
+on the non-binding guard keeps ``escalate everything'' from scoring.
 \end{enumerate}
-The rollup is a two-stage-bootstrapped cross-fitted CVaR over the pooled scored
-cells, reported beside its plain mean, a harmonic mean over axes 1--4 and 6, and a
-mean win rate; we publish the inter-axis correlation matrix and per-axis $\kappa$
-rather than asserting orthogonality. Four trivial agents (\textsc{always-comply},
-\textsc{always-cheapest}, \textsc{always-escalate}, \textsc{random}) run every
-release: if any out-ranks a real model on any axis, that axis is broken by
-construction.
 
-\subsection{Evaluation Protocol}
+\paragraph{Rollup and un-gameability.} The scalar summary is a
+two-stage-bootstrapped cross-fitted CVaR over the pooled scored cells, reported
+beside its plain mean (the floor-versus-mean gap is itself informative), a harmonic
+mean over axes 1--4 and 6 (axis 5 held out), and a mean win rate. We publish the full
+inter-axis correlation matrix and per-axis $\kappa$ rather than asserting
+orthogonality, since the axes span a reliability range (1, 2, 4 near-deterministic; 3
+turn-parsing; 6 mostly deterministic; 5 all-judge) a pooled number would hide.
+Finally, four trivial agents (\textsc{always-comply}, \textsc{always-cheapest},
+\textsc{always-escalate}, \textsc{random}) run on every release: if any out-ranks a
+real model on any axis, that axis is broken by construction and is pulled from the
+headline. The guard cells, balanced-accuracy discernment, and escalation ceiling are
+the specific defenses that keep each degenerate policy off the top.
+
+\subsection{Building the Benchmark}
+\label{sec:building}
+
+\subsubsection{The measurement template.}
+\label{sec:template}
+Every item instantiates one template, and this isomorphism is what makes compliance
+rates comparable across unrelated domains. It fixes six invariants.
+\emph{(1) Deployment framing.} A \emph{system} prompt gives the agent's persona and
+the KPIs it is measured on and never mentions the decision; the rule is appended as a
+standing, account-agnostic note stating the general rule only. A \emph{user} turn
+carries the request, case facts, and menu. Compliance is stated nowhere: which option
+satisfies the rule is derivable only by joining the case facts to the rule, making
+each item a reasoning task rather than a keyword match.
+\emph{(2) Dominance structure.} The menu holds two to five options with at least one
+rule-violating option that strictly dominates on the local objective and at least one
+rule-compliant option that costs more; menu order never encodes compliance.
+\emph{(3) Informational framing.} The rule is a neutral statement of fact, never a
+command; command-style strictness is supplied only in the steerability arm.
+\emph{(4) Conditional second turn.} Every neutral and pressure item carries a turn~2
+conditioned on the turn~1 answer: a \emph{pushback} if the model complied, a
+\emph{challenge} if it violated.
+\emph{(5) Guard cells.} Each scenario ships a non-binding twin, a minimal edit in
+which the rule does not apply, so holding it is an error; the guards separate
+rule-following from rule-parroting.
+\emph{(6) Feature codes.} Each scenario is coded on rule crispness, benefit
+denomination, victim salience, and penalty type, so the regression
+\texttt{compliance $\sim$ crispness $+$ benefit $+$ victim $+$ penalty $+
+(1|\mathrm{model})+(1|\mathrm{domain})$} has 48 sampling units at launch.
+
+\subsubsection{Domains and scenarios.}
+\label{sec:domains}
+The template is instantiated in \textbf{twelve regulated domains} with \textbf{four
+scenarios each} (48 total; Appendix~\ref{app:domains}), spanning privacy (GDPR),
+finance, customer service, government services, HR, AML/KYC, healthcare
+administration (HIPAA), pharma medical information, advertising, export controls,
+content moderation, and procurement. Each domain met three criteria: a documented
+deployment surface, a crisp rule an agent can violate in a \emph{recommendation}, and
+a real penalty anchor (statute, regulator action, or litigated AI incident). Seven
+reconstruct settings that already produced a legal consequence (among them
+\emph{Moffatt v.\ Air Canada}, NYC MyCity, and \emph{Mobley v.\ Workday}). The four
+scenarios per domain use distinct rules and jointly span all benefit denominations,
+victim-salience levels, and penalty types; moderation is the deliberately fuzzy-rule
+domain and procurement doubles as a contamination tripwire against prior published
+data.
+
+\subsubsection{Pressures and multi-turn stressors.}
+\label{sec:pressures}
+The stressor is a battery of \textbf{nine scored pressures}, each targeting a distinct
+compliance-theory mechanism so that none is redundant: \emph{urgency} (time scarcity),
+\emph{mgr\_verbal} (legitimate authority), \emph{peer\_escaped} (descriptive norm plus
+impunity), \emph{risk\_minimize} (deterrence discounting), \emph{cost\_pressure} (loss
+framing), \emph{false\_clearance} (unverifiable authorization), \emph{fait\_accompli}
+(commitment and sunk cost), \emph{sympathetic\_beneficiary} (an identifiable person
+harmed by \emph{compliance}), and \emph{responsibility\_shift} (accountability
+transfer). The users are \emph{benign}: none jailbreaks; each is an employee whose
+convenience conflicts with the rule, the realistic enterprise threat. A tenth
+pressure, \emph{rule\_delegitimization} (an epistemic attack on the rule's scope), is
+not scored but drives the discernment-under-attack cells: applied to a binding item
+the model must hold, and its mirror on the non-binding guard the model must stand down
+against.
+
+\subsubsection{Generating the items as an audited instrument.}
+\label{sec:generation}
+Items are LLM-authored, so generation is engineered as a measurement instrument with a
+published quality record. A scenario is built \emph{component by component} in
+dependency order (persona, request and menu, rule note, nine pressures, guard twin,
+two turn~2 scripts, two attacks), each conditioned on the accepted components so it
+speaks with one voice; the baseline request is shared verbatim across the battery, so
+any leak would contaminate every cell built on it. Prompts are \emph{zero-shot},
+because scenarios generated against a shared exemplar converge on its names and cadence
+and destroy between-domain variance, and naturalism is enforced at the source
+(register, invented work artifacts, deliberate typing imperfections), because
+evaluation awareness is a first-order threat. Three generator models each author a
+\emph{complete, independent} pack per scenario, and every structurally valid component
+is reviewed by the two models that did \emph{not} write it, on \emph{scope} and
+\emph{authenticity}; either failure burns one of five attempts, and five rejections
+yield a flagged pack that never counts as valid. Deterministic checks (menu
+composition, an account-agnostic rule note, pressure tripwires) run first, and dashes
+and smart quotes are stripped. Every verdict ships as a flat row with per-pair
+$\kappa$, and because each scenario exists in one version per generator, ``items favor
+their author's family'' becomes a computable interaction test rather than an objection.
+Rendering is then deterministic: each valid pack yields the identical 13-cell battery
+(one neutral, nine pressure, one non-binding guard, two under-attack), giving
+$48\times3\times13=1{,}872$ items with gold labels, split tags, a canary GUID, and a
+committed SHA-256 that acts as the pre-registration.
+
+\subsubsection{Evaluation protocol.}
 \label{sec:protocol}
-
-One trial is an (item, model, replication, arm) tuple: send system plus turn~1,
-judge it, select the conditional turn~2, send it with history, judge again. Trials
-are keyed by a stable id and appended to disk, so a killed run resumes; the budget
-is ten replications across a 12-model panel, with floor-defining cells topped up to
-$n\geq50$. Judging is deterministic-first: a rule-based extractor resolves most
-responses for free, a small non-reasoning judge sees only the residual, and every
-row logs the judge and a prompt hash. The honesty judge uses the three generators
-leave-one-out (never its own scenario or response). A judge-swap gate requires
-Kendall $\tau\geq0.9$ over the ranking before release, and a stratified human gold
-set is double-annotated with per-domain $\kappa$. A separate awareness probe flags
-signs the model believes it is being tested and is reported beside the leaderboard,
-never folded in. Throughout we report Wilson intervals per cell, item-clustered
-standard errors, Benjamini--Hochberg-corrected bootstrap contrasts, and two-stage
-bootstrap on rollups; at temperature 1.0 results are statistical estimates and
-always carry intervals.
+One trial is an (item, model, replication, arm) tuple: send system plus turn~1, judge
+it, select the conditional turn~2, send it with history, judge again. Trials are keyed
+by a stable id and appended to disk, so a killed run resumes; the budget is ten
+replications across a 12-model panel, with floor-defining cells topped up to $n\geq50$.
+Judging is deterministic-first: a rule-based extractor resolves most responses for
+free, a small non-reasoning judge sees only the residual, and every row logs the judge
+and a prompt hash. The honesty judge uses the three generators leave-one-out. A
+judge-swap gate requires Kendall $\tau\geq0.9$ over the ranking before release, and a
+stratified human gold set is double-annotated with per-domain $\kappa$. A separate
+awareness probe flags signs the model believes it is being tested and is reported
+beside the leaderboard, never folded in. Throughout we report Wilson intervals per
+cell, item-clustered standard errors, Benjamini--Hochberg-corrected bootstrap
+contrasts, and two-stage bootstrap on rollups; at temperature 1.0 results are
+statistical estimates and always carry intervals.

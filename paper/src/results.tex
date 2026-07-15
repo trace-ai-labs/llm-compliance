@@ -1,27 +1,28 @@
-\section{Validating the Instrument}
+\section{Findings and Discussion}
+\label{sec:findings}
+
+The full 12-model evaluation sweep is in progress. At submission we report two
+things: evidence that the measuring instrument is sound (the metric design was
+validated on a prior single-domain study before we trusted it), and the leaderboard
+and fine-grained analyses the frozen benchmark is built to produce. We then discuss
+implications and threats.
+
+\subsection{The metrics are validated}
 \label{sec:validation}
 
-A benchmark's numbers are only as trustworthy as the instrument behind them, and
-this one (a floor-sensitive rollup, a generated item set, an LLM-assisted judge)
-makes assumptions that can fail silently. Before any model leaderboard we report the
-validation record that shaped the design and the structure the frozen benchmark
-produces.
-
-\subsection{Metric Validation on a Precursor Study}
-\label{sec:selfval}
-
-The metrics were not chosen a priori. We stress-tested them on a 72{,}142-trial
-precursor study of the procurement anchor (twelve models under one embedded rule,
-varied by framing, enforcement, authority, peer signals, and pushback) and revised
-where the data contradicted an assumption (Table~\ref{tab:selfval}); each test is
-reproducible from the released re-analysis code.
+The metrics were not chosen a priori. They were stress-tested on 72{,}142 trials from
+a prior single-domain compliance study~\citep{priorstudy} (twelve models under one
+embedded procurement rule, varied by framing, enforcement, authority, peer signals,
+and pushback) and revised where the data contradicted an assumption
+(Table~\ref{tab:selfval}); each test is reproducible from the released re-analysis
+code.
 
 \begin{table*}[t]
 \centering
 \small
 \begin{tabular}{p{4.0cm} p{5.7cm} p{5.4cm}}
 \toprule
-\textbf{Test} & \textbf{Result on precursor data} & \textbf{Design consequence} \\
+\textbf{Test} & \textbf{Result on the prior-study data} & \textbf{Design consequence} \\
 \midrule
 Split-half reliability &
 CVaR leaderboard $\rho = 0.91\pm0.05$; mean $\rho = 0.98$ &
@@ -47,12 +48,13 @@ Abstention hypothesis &
 Demoted to exploratory; escalation coded as a first-class outcome. \\
 \bottomrule
 \end{tabular}
-\caption{The pre-launch validation record on the 72{,}142-trial precursor dataset.
-Three design revisions (CVaR replacing worst-case, the failed abstention hypothesis,
-and the fixed multi-turn denominator) are documented as changes rather than quietly
-dropped. Judge cross-check (deterministic extractor agrees with the LLM judge 96.0\%
-over 78.6\% coverage) and the $\alpha$-stability sweep ($\tau\!\geq\!0.79$ for
-$\alpha\!\in\![0.25,1]$) sized the pipeline and fixed $\alpha=0.25$.}
+\caption{The pre-launch validation record, run on 72{,}142 trials from a prior
+single-domain study~\citep{priorstudy}. Three design revisions (CVaR replacing
+worst-case, the failed abstention hypothesis, and the fixed multi-turn denominator)
+are documented as changes rather than quietly dropped. A judge cross-check
+(deterministic extractor agrees with the LLM judge 96.0\% over 78.6\% coverage) and
+an $\alpha$-stability sweep ($\tau\!\geq\!0.79$ for $\alpha\!\in\![0.25,1]$) sized the
+pipeline and fixed $\alpha=0.25$.}
 \label{tab:selfval}
 \end{table*}
 
@@ -60,26 +62,56 @@ Three findings warrant the most distinctive choices. \textbf{The floor is not th
 mean}: a Kendall $\tau$ of 0.70 between the CVaR and mean leaderboards means
 floor-weighting genuinely reorders models, so a mean headline would rank by the
 quantity that hides the cliff. \textbf{The battery is not collapsible}: transfer of
-0.33 to 0.84 says an authority-robust model is not reliably urgency-robust, so
-pruning to one pressure discards information. \textbf{The paradox is real}: a weak
-penalty reducing compliance for 10 of 12 models is ``a fine is a
-price''~\citep{gneezy2000fine} in machines, and it is actionable, since removing
-quantitative penalty language from system prompts avoids it for prone models.
+0.33 to 0.84 says an authority-robust model is not reliably urgency-robust, so pruning
+to one pressure discards information. \textbf{The paradox is real}: a weak penalty
+reducing compliance for 10 of 12 models is ``a fine is a price''~\citep{gneezy2000fine}
+in machines, and it is actionable, since removing quantitative penalty language from
+system prompts avoids it for prone models.
 
-\subsection{Reporting and Un-Gameability}
-\label{sec:reporting}
+\subsection{What the release will report}
+\label{sec:leaderboard}
 
-Applied to the frozen 1{,}872-item set across a 12-model panel, the pipeline
-produces, per model, the six-axis profile with per-axis $\kappa$, the scalar rollup
-(cross-fitted CVaR with a bootstrap interval, plain-mean gap, harmonic mean, win
-rate), fragility breadth, the inter-axis correlation matrix, the rule-feature
-regression over the 48 scenarios, and the awareness rate, with Wilson intervals and
-clustered standard errors on every cell. The design is frozen and pre-registered,
-but the 12-model sweep is still running at submission, so we report the instrument
-and its validation here and release the leaderboard and per-trial outcomes with the
-artifact rather than assert rankings we have not completed. The four trivial agents
-are the built-in falsification test: \textsc{always-comply} maximizes raw compliance
-yet scores 0.5 on discernment and breaches the escalation ceiling,
-\textsc{always-cheapest} floors pressure resistance, \textsc{always-escalate} is
-caught by the over-escalation term, and \textsc{random} sits at chance; if any
-out-ranks a real model on an axis, that axis is pulled from the headline.
+Applied to the frozen 1{,}872-item set across the 12-model panel, the pipeline
+produces a leaderboard whose rows are models (plus the four trivial agents) and whose
+columns are the six axes, the scalar rollup with a bootstrap interval, and the
+fragility-breadth count. Beneath it sit the fine-grained analyses the design was built
+to support: the rule-feature regression across the 48 scenarios (which rule
+properties predict compliance), per-domain profiles a deployer can filter to, the
+inter-axis correlation matrix that tests whether the axes stayed de-correlated on real
+models, and the evaluation-awareness rate as a validity flag. Per-cell tables carry
+Wilson intervals and clustered standard errors, and per-model contrasts carry
+Benjamini--Hochberg-adjusted bootstrap $p$-values. These become interpretable only
+once the sweep completes; we release the leaderboard, per-trial outcomes, and every
+alternative aggregation with the artifact rather than assert rankings we have not yet
+produced. The trivial-agent rows are the standing falsification test: if
+\textsc{always-comply}, \textsc{always-cheapest}, \textsc{always-escalate}, or
+\textsc{random} out-ranks a real model on any axis, that axis is pulled from the
+headline.
+
+\subsection{Discussion and social impact}
+
+PACT targets a concrete governance decision. A bank, hospital, or municipal office
+choosing an agent for a regulated workflow has no instrument that answers ``which
+model holds this rule under a rushed manager?'' A per-domain, floor-sensitive,
+multi-turn profile gives a deployer something to act on: filter the leaderboard to
+their own domain, read the worst-quartile floor rather than the flattering mean, check
+whether a guardrail actually moves the candidate, and see whether a violating model at
+least admits it. Two findings are already interventions: rephrasing a rule imperatively
+raises compliance, and removing quantitative penalty language avoids the ``fine is a
+price'' paradox for prone models. The frozen item set, with its pre-registered hash,
+private holdout, and canary, also lets the same benchmark rerun on each model
+\emph{version}; no one currently tracks whether a vendor's silent update moved its
+urgency floor, and a benchmark that catches that becomes monitoring infrastructure.
+
+\paragraph{Threats to validity.} \emph{Evaluation awareness} would undermine any
+propensity benchmark; we enforce naturalism at generation and report a dedicated
+awareness probe, measuring the threat rather than assuming it away. \emph{Stated
+versus enacted compliance}: recommendation-level compliance upper-bounds what a
+tool-using agent actuates, and an actuated variant is future work, but \emph{Moffatt
+v.\ Air Canada} established that a chatbot's statement is itself a liability
+surface~\citep{moffatt2024aircanada}. \emph{Judge circularity} is met by the
+deterministic first tier, the human gold set, and the judge-swap $\tau$-gate.
+\emph{Generated items} could favor their author's family, which the dual-guard review
+and the computable generator-versus-evaluatee test address. \emph{Panel size}:
+model-level analyses are indicative at twelve models, so the item-level statistics over
+thousands of trials are load-bearing, and every new model strengthens them.
