@@ -1,119 +1,85 @@
 \section{Validating the Instrument}
 \label{sec:validation}
 
-A benchmark's numbers are only as trustworthy as the measuring instrument that
-produced them, and the instrument here (a floor-sensitive rollup, a generated item
-set, and an LLM-assisted judge) makes several assumptions that can fail silently.
-We therefore report two things before any model leaderboard: the validation record
-that shaped the metric design, and the reporting structure the frozen benchmark
+A benchmark's numbers are only as trustworthy as the instrument behind them, and
+this one (a floor-sensitive rollup, a generated item set, an LLM-assisted judge)
+makes assumptions that can fail silently. Before any model leaderboard we report the
+validation record that shaped the design and the structure the frozen benchmark
 produces.
 
 \subsection{Metric Validation on a Precursor Study}
 \label{sec:selfval}
 
-The metric design was not chosen a priori. It was stress-tested on a
-72{,}142-trial precursor study of the procurement anchor (twelve models under a
-single embedded rule, varied by framing, enforcement, authority, peer signals, and
-multi-turn pushback) and revised where the data contradicted an assumption.
-Table~\ref{tab:selfval} summarizes the tests that changed or confirmed a design
-decision; each is reproducible from the released re-analysis code.
+The metrics were not chosen a priori. We stress-tested them on a 72{,}142-trial
+precursor study of the procurement anchor (twelve models under one embedded rule,
+varied by framing, enforcement, authority, peer signals, and pushback) and revised
+where the data contradicted an assumption (Table~\ref{tab:selfval}); each test is
+reproducible from the released re-analysis code.
 
 \begin{table*}[t]
 \centering
 \small
-\begin{tabular}{p{4.2cm} p{5.6cm} p{5.3cm}}
+\begin{tabular}{p{4.0cm} p{5.7cm} p{5.4cm}}
 \toprule
 \textbf{Test} & \textbf{Result on precursor data} & \textbf{Design consequence} \\
 \midrule
 Split-half reliability &
 CVaR leaderboard $\rho = 0.91\pm0.05$; mean $\rho = 0.98$ &
-Floor metric is viable; floor cells get $n\!\geq\!50$ top-ups. \\
+Floor metric viable; floor cells get $n\!\geq\!50$ top-ups. \\
 Cross-family transfer &
 A score computed \emph{without} a pressure family predicts rank on it at
 $\rho = 0.84$ (peer) down to $0.33$ (authority) &
 The battery is not collapsible; each family is pre-registered. \\
 Dimensionality (PCA) &
-PC1 explains 47\% of variance, PC2 22\%; inter-dimension $r \leq 0.64$ &
-Compliance is not one latent trait; the profile is primary, the scalar a
-summary. \\
+PC1 $=47\%$ of variance, PC2 $=22\%$; inter-dimension $r \leq 0.64$ &
+Not one latent trait; the profile is primary, the scalar a summary. \\
 Aggregator agreement &
-CVaR-vs-mean leaderboard Kendall $\tau = 0.70$; a mid-pack model is
-bottom-quartile by floor &
-The floor-vs-mean choice is load-bearing; both ship. \\
+CVaR-vs-mean Kendall $\tau = 0.70$; a mid-pack model is bottom-quartile by floor &
+The floor-vs-mean choice reorders models; both ship. \\
 Worst-case degeneracy &
-Urgency floors all twelve models to $\sim$0--6\%, so \texttt{min} ties eleven of
-them &
-A tail \emph{mean} (CVaR) is required to retain discrimination. \\
-$\alpha$ stability sweep &
-Ranks stable for $\alpha\!\in\![0.25,1.0]$ ($\tau\!\geq\!0.79$), unstable below &
-$\alpha=0.25$ pre-registered as the deepest supportable tail. \\
+Urgency floors all twelve models to $\sim$0--6\%, so \texttt{min} ties eleven &
+A tail \emph{mean} (CVaR), not a minimum, retains discrimination. \\
 The compliance paradox &
-Adding a weak penalty \emph{lowers} compliance; significant after
-Benjamini--Hochberg for 10/12 models &
-The effect is real and per-model, with intervals; a theory-grounded axis. \\
-Reliability under repetition &
-Even the best model's compliance falls $36\%\!\to\!13\%\!\to\!2\%\!\to\!0\%$ at
-$k=1,2,4,8$ within its worst regime &
-A repeated-deployment reliability read earns its place beside the mean. \\
-Judge cross-check &
-Deterministic extractor agrees with the LLM judge 96.0\% of the time, covering
-78.6\% of trials &
-The deterministic-first pipeline is correctly sized. \\
+A weak penalty \emph{lowers} compliance; significant post-BH for 10/12 models &
+The effect is real and per-model; a theory-grounded axis. \\
 Abstention hypothesis &
 \textbf{Failed}: shifts $\leq\!7$pp, wrong sign for three models &
-Demoted to exploratory; escalation is coded as a first-class outcome instead. \\
+Demoted to exploratory; escalation coded as a first-class outcome. \\
 \bottomrule
 \end{tabular}
-\caption{The pre-launch validation record. Each row is a test we ran on the
-72{,}142-trial precursor dataset that either confirmed a design choice or forced a
-revision; three revisions (CVaR replacing worst-case, the failed abstention
-hypothesis, and the multi-turn denominator) are documented as changes rather than
-quietly dropped.}
+\caption{The pre-launch validation record on the 72{,}142-trial precursor dataset.
+Three design revisions (CVaR replacing worst-case, the failed abstention hypothesis,
+and the fixed multi-turn denominator) are documented as changes rather than quietly
+dropped. Judge cross-check (deterministic extractor agrees with the LLM judge 96.0\%
+over 78.6\% coverage) and the $\alpha$-stability sweep ($\tau\!\geq\!0.79$ for
+$\alpha\!\in\![0.25,1]$) sized the pipeline and fixed $\alpha=0.25$.}
 \label{tab:selfval}
 \end{table*}
 
-Three findings justify the benchmark's most distinctive choices. \textbf{The floor
-is not the mean.} A Kendall $\tau$ of 0.70 between the CVaR and mean leaderboards
-means the floor-weighting genuinely reorders models, so publishing the mean as the
-headline would rank models by exactly the quantity that hides the cliff a deployer
-falls off. \textbf{The battery is not collapsible.} Cross-family transfer ranging
-from 0.33 to 0.84 says the pressure families measure partially distinct properties;
-an authority-robust model is not reliably urgency-robust, so pruning to one pressure
-would discard information a governance user needs. \textbf{The paradox is real.} A
-truthfully described weak penalty \emph{reducing} compliance, significant for 10 of
-12 models, is the ``fine is a price'' effect~\citep{gneezy2000fine} reproduced in
-machines, and it is directly actionable: for paradox-prone models, quantitative
-penalty language should be removed from system prompts. These are the empirical
-warrants for the cross-fitted-CVaR floor, the nine-family battery, and the
-theory-grounded framing.
+Three findings warrant the most distinctive choices. \textbf{The floor is not the
+mean}: a Kendall $\tau$ of 0.70 between the CVaR and mean leaderboards means
+floor-weighting genuinely reorders models, so a mean headline would rank by the
+quantity that hides the cliff. \textbf{The battery is not collapsible}: transfer of
+0.33 to 0.84 says an authority-robust model is not reliably urgency-robust, so
+pruning to one pressure discards information. \textbf{The paradox is real}: a weak
+penalty reducing compliance for 10 of 12 models is ``a fine is a
+price''~\citep{gneezy2000fine} in machines, and it is actionable, since removing
+quantitative penalty language from system prompts avoids it for prone models.
 
-\subsection{What the Frozen Benchmark Reports}
+\subsection{Reporting and Un-Gameability}
 \label{sec:reporting}
 
 Applied to the frozen 1{,}872-item set across a 12-model panel, the pipeline
-produces, per model: the six-axis profile with per-axis $\kappa$; the scalar
-rollup (cross-fitted CVaR with a two-stage-bootstrap interval, its plain-mean gap,
-the harmonic mean, and the mean win rate); the fragility-breadth count; the
-inter-axis correlation matrix; the rule-feature regression across the 48 scenarios;
-and the evaluation-awareness rate as a validity flag. Per-cell tables carry Wilson
-intervals and clustered standard errors, and per-model contrasts carry
-Benjamini--Hochberg-adjusted bootstrap $p$-values. Because the full design has been
-frozen and pre-registered but the 12-model evaluation sweep is still in progress at
-submission time, we report the instrument and its validation here and release the
-leaderboard, per-trial outcomes, and all alternative aggregations with the artifact
-rather than asserting model rankings we have not yet completed.
-
-\subsection{Un-Gameability, Demonstrated}
-\label{sec:gameability}
-
-The four trivial agents are the benchmark's built-in falsification test, run on
-every release without model calls. Each is designed to top a na\"ive metric and
-fail the real one. \textsc{always-comply} maximizes raw compliance but scores 0.5 on
-rule-scope discernment and breaches the needless-escalation ceiling;
-\textsc{always-cheapest} floors pressure resistance; \textsc{always-escalate} is
-caught by the discernment guard's over-escalation term; and \textsc{random} sits at
-chance on every axis. The release invariant is explicit: if any trivial agent
-out-ranks a real model on any axis, that axis is broken and is pulled from the
-headline. This turns un-gameability from a claim into a per-release check, and it is
-why the discernment axis is scored as balanced accuracy with a guard twin rather
-than as raw compliance.
+produces, per model, the six-axis profile with per-axis $\kappa$, the scalar rollup
+(cross-fitted CVaR with a bootstrap interval, plain-mean gap, harmonic mean, win
+rate), fragility breadth, the inter-axis correlation matrix, the rule-feature
+regression over the 48 scenarios, and the awareness rate, with Wilson intervals and
+clustered standard errors on every cell. The design is frozen and pre-registered,
+but the 12-model sweep is still running at submission, so we report the instrument
+and its validation here and release the leaderboard and per-trial outcomes with the
+artifact rather than assert rankings we have not completed. The four trivial agents
+are the built-in falsification test: \textsc{always-comply} maximizes raw compliance
+yet scores 0.5 on discernment and breaches the escalation ceiling,
+\textsc{always-cheapest} floors pressure resistance, \textsc{always-escalate} is
+caught by the over-escalation term, and \textsc{random} sits at chance; if any
+out-ranks a real model on an axis, that axis is pulled from the headline.
