@@ -25,6 +25,21 @@ risk~\citep{liu2024agentbench,zhou2024webarena,ruan2024toolemu}, and recent
 policy-adherence work builds runtime \emph{enforcement} rather than measuring the
 propensity it backstops~\citep{zwerdling2025policyadherence}.
 
+\paragraph{Instruction following and instruction hierarchy.} A separate line asks
+whether a model obeys the instructions it is given. General instruction-following
+benchmarks such as IFEval check explicit, verifiable constraints (``answer in three
+bullets,'' ``include this keyword'')~\citep{zhou2023ifeval}: a capability with no
+competing incentive and no reason to disobey, whereas PACT's rule is a standing policy
+that a later, benign request gives the agent a reason to override. Closer is the
+\emph{instruction hierarchy}, where a system instruction conflicts with a user
+instruction and the model must prioritize the former; IHEval shows frontier models
+degrade sharply once such instructions conflict~\citep{zhang2025iheval}. PACT shares
+that system-rule-versus-user-request shape, but its conflict is not between two
+explicit instructions --- it is between an explicit standing rule and an
+\emph{implicit} incentive carried by an ordinary user, scored behaviorally under
+theory-grounded pressure across turns rather than by constraint satisfaction on a
+single turn.
+
 \paragraph{Compliance and regulatory benchmarks.} A fast-growing set of benchmarks
 shares our vocabulary but not our target. Several put the model in the
 \emph{assessor} role, judging whether text, a request, or a dialogue complies:
@@ -98,28 +113,40 @@ teeth~\citep{dlapiper2026gdpr,hhs2024hipaapenalties,euaiact2024,eudsa2022}.
 \begin{table*}[t]
 \centering
 \small
-\renewcommand{\arraystretch}{1.25}
-\begin{tabular}{@{}l p{4.5cm} p{4.0cm} p{3.7cm}@{}}
+\setlength{\tabcolsep}{7pt}
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}p{2.4cm} p{5.4cm} cccc p{4.6cm}@{}}
 \toprule
-\textbf{Benchmark} & \textbf{Setting} & \textbf{Pressure on the agent} & \textbf{Interaction} \\
+ & & \multicolumn{4}{c}{\textbf{Considers}} & \\
+\cmidrule(lr){3-6}
+\textbf{Benchmark} & \textbf{Setting}
+ & \rotatebox[origin=c]{90}{\textbf{Multi-turn}\,}
+ & \rotatebox[origin=c]{90}{\textbf{Honesty}\,}
+ & \rotatebox[origin=c]{90}{\textbf{Pressure}\,}
+ & \rotatebox[origin=c]{90}{\textbf{Multi-domain}\,}
+ & \textbf{Reported metric} \\
 \midrule
-\textbf{PACT (ours)} & Realistic enterprise deployment; a benign user with a conflicting need & \textbf{Nine distinct, theory-grounded mechanisms} & Multi-turn, with pushback \\
-$\tau^2$-bench~\citep{barres2025tau2bench} & Customer-service tasks; cooperative user & None & Multi-turn (cooperative) \\
-MASK~\citep{ren2025mask} & Knowledge Q\&A; coercive prompt & A single incentive to lie & Single-turn \\
-AIR-Bench~\citep{zeng2024airbench} & Regulation-derived unsafe prompts & None (asks for the violation) & Single-turn \\
-CompliBench~\citep{yang2026complibench} & Chat transcripts, model as grader & None (it grades others) & Grades multi-turn logs \\
-MAC-Bench~\citep{zhao2026macbench} & Multi-agent task simulation & A task-reward incentive & Multi-turn (agent--agent) \\
+\textbf{PACT (ours)} & Enterprise agent; a benign user with a conflicting need & \checkmark & \checkmark & \checkmark & \checkmark & Compliance; worst-case CVaR floor (six axes) \\
+Prior study~\citep{priorstudy} & Procurement bot; one embedded rule & \checkmark & $\sim$ & \checkmark & -- & Compliance rate \\
+$\tau^2$-bench~\citep{barres2025tau2bench} & Support agent; cooperative user & \checkmark & -- & -- & $\sim$ & Task success (pass$^k$) \\
+MASK~\citep{ren2025mask} & Knowledge Q\&A; prompt pressures a lie & -- & \checkmark & $\sim$ & \checkmark & Honesty score \\
+AgentHarm~\citep{andriushchenko2024agentharm} & Agent given malicious tasks & -- & -- & -- & \checkmark & Harm / refusal score \\
+AIR-Bench~\citep{zeng2024airbench} & Prompts requesting unsafe content & -- & -- & -- & \checkmark & Refusal rate \\
+SORRY-Bench~\citep{xie2024sorrybench} & Prompts requesting unsafe content & $\sim$ & -- & -- & \checkmark & Refusal rate \\
+CompliBench~\citep{yang2026complibench} & Model grades chat transcripts & \checkmark & -- & -- & $\sim$ & Detection F1 (as judge) \\
+MAC-Bench~\citep{zhao2026macbench} & Multi-agent task simulation & \checkmark & -- & $\sim$ & $\sim$ & Compliance vs.\ task success \\
 \bottomrule
 \end{tabular}
-\caption{PACT against its nearest neighbors, read at a glance across three
-questions: the \emph{setting} it evaluates and who sits on the other side, the
-\emph{pressure} (if any) that tempts the agent away from the rule, and the
-\emph{interaction} structure. PACT is the only one that puts a benign user with a
-conflicting request into a realistic enterprise deployment and applies a battery of
-nine distinct pressure mechanisms across turns; the others each cover a piece.
-Beyond these columns, PACT reports worst-case rather than average scores, ships
-over-compliance guard cells, and freezes its items behind a private holdout and a
-canary (\S\ref{sec:metrics}, \S\ref{sec:validation}).}
+\caption{PACT against its nearest neighbors. The \emph{setting} names the deployment
+and who sits on the other side; the \emph{Considers} block marks whether the benchmark
+exercises multi-turn interaction, honesty when a model does the wrong thing, a battery
+of distinct pressures, and many domains; the last column is the headline metric each
+reports (\checkmark\ present, $\sim$ partial or adjacent, -- absent). PACT is the only
+one that combines a benign user whose ordinary request conflicts with an embedded
+rule, sustained pushback across turns, and a battery of nine theory-grounded pressure
+mechanisms. Beyond these columns it reports worst-case rather than average scores,
+ships over-compliance guard cells, and freezes its items behind a private holdout and
+a canary (\S\ref{sec:metrics}, \S\ref{sec:validation}).}
 \label{tab:compare}
 \end{table*}
 
