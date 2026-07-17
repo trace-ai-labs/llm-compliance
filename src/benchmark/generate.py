@@ -1221,6 +1221,134 @@ def guard_figures(log_path: str = GUARD_LOG,
         fig.savefig(os.path.join(out_dir, "guard_attempts.png"), dpi=150)
         plt.close(fig)
 
+    # attempts-to-acceptance distribution, broken out BY component type
+    def _kind(comp: str) -> str:
+        return "pressure" if comp.startswith("pressure.") else comp
+    acc_by_kind: Dict[str, List[int]] = {}
+    na_by_kind: Counter = Counter()
+    for (sid, comp), n in accepted_at.items():
+        acc_by_kind.setdefault(_kind(comp), []).append(n)
+    for (sid, comp) in rejected_n:
+        na_by_kind[_kind(comp)] += 1
+    _order = ["persona", "task", "rules", "t2", "guard_nonbinding", "attacks",
+              "pressure"]
+    kinds = [k for k in _order if k in acc_by_kind] + \
+            [k for k in sorted(acc_by_kind) if k not in _order]
+    if kinds:
+        maxk = max((max(v) for v in acc_by_kind.values()), default=1)
+        fig, axes = plt.subplots(len(kinds), 1,
+                                 figsize=(6.5, 1.35 * len(kinds) + 0.6),
+                                 sharex=True)
+        if len(kinds) == 1:
+            axes = [axes]
+        for ax, k in zip(axes, kinds):
+            vals = acc_by_kind[k]
+            counts = [vals.count(i) for i in range(1, maxk + 1)]
+            ax.bar(range(1, maxk + 1), counts, width=0.7, color=_FIG_BLUE)
+            for i, c in enumerate(counts, start=1):
+                if c:
+                    ax.text(i, c, str(c), ha="center", va="bottom",
+                            fontsize=8, color=_FIG_INK)
+            mean = sum(vals) / len(vals)
+            first = 100 * vals.count(1) / len(vals)
+            na = na_by_kind[k]
+            ax.set_title(f"{k}  -  n={len(vals)}, mean {mean:.2f} attempts, "
+                         f"{first:.0f}% first-try, NA={na}",
+                         loc="left", fontsize=9.5, color=_FIG_INK)
+            ax.set_ylabel("packs", fontsize=8, color=_FIG_MUTED)
+            ax.set_xticks(range(1, maxk + 1))
+            ax.tick_params(colors=_FIG_INK, labelsize=8)
+            ax.grid(axis="y", color="#e5e7eb", linewidth=0.8)
+            ax.set_axisbelow(True)
+            for s in ("top", "right", "left"):
+                ax.spines[s].set_visible(False)
+            ax.spines["bottom"].set_color("#e5e7eb")
+        axes[-1].set_xlabel("attempts to acceptance (1 = passed first try)",
+                            fontsize=9, color=_FIG_MUTED)
+        fig.suptitle("Attempts to converge by component type", x=0.02,
+                     ha="left", fontsize=11, color=_FIG_INK)
+        fig.tight_layout(rect=[0, 0, 1, 0.99])
+        fig.savefig(os.path.join(out_dir, "convergence_by_component.png"),
+                    dpi=150)
+        plt.close(fig)
+
+    # attempts until each GUARD first passes a component, broken out by guard
+    # (this is the per-guard strictness signal: who drags convergence)
+    gfp: Dict[Tuple[str, str, str], int] = {}
+    for r in judged:
+        if r["verdict"] == "PASS":
+            key = (r["scenario_id"], r["component"], r["guard_model"])
+            norm = r["attempt"] - first_attempt[(r["scenario_id"],
+                                                 r["component"])] + 1
+            gfp[key] = min(gfp.get(key, 10 ** 9), norm)
+    gfp_by_guard: Dict[str, List[int]] = {}
+    for (sid, comp, gm), n in gfp.items():
+        gfp_by_guard.setdefault(gm, []).append(n)
+    guards = sorted(gfp_by_guard,
+                    key=lambda g: sum(gfp_by_guard[g]) / len(gfp_by_guard[g]))
+    if guards:
+        maxk = max((max(v) for v in gfp_by_guard.values()), default=1)
+        fig, axes = plt.subplots(len(guards), 1,
+                                 figsize=(6.5, 1.35 * len(guards) + 0.6),
+                                 sharex=True)
+        if len(guards) == 1:
+            axes = [axes]
+        for ax, gm in zip(axes, guards):
+            vals = gfp_by_guard[gm]
+            counts = [vals.count(i) for i in range(1, maxk + 1)]
+            ax.bar(range(1, maxk + 1), counts, width=0.7, color=_FIG_BLUE)
+            for i, c in enumerate(counts, start=1):
+                if c:
+                    ax.text(i, c, str(c), ha="center", va="bottom",
+                            fontsize=8, color=_FIG_INK)
+            mean = sum(vals) / len(vals)
+            first = 100 * vals.count(1) / len(vals)
+            ax.set_title(f"{gm.split('/')[-1]}  -  n={len(vals)}, "
+                         f"mean {mean:.2f} rounds to first PASS, "
+                         f"{first:.0f}% first-try",
+                         loc="left", fontsize=9.5, color=_FIG_INK)
+            ax.set_ylabel("reviews", fontsize=8, color=_FIG_MUTED)
+            ax.set_xticks(range(1, maxk + 1))
+            ax.tick_params(colors=_FIG_INK, labelsize=8)
+            ax.grid(axis="y", color="#e5e7eb", linewidth=0.8)
+            ax.set_axisbelow(True)
+            for s in ("top", "right", "left"):
+                ax.spines[s].set_visible(False)
+            ax.spines["bottom"].set_color("#e5e7eb")
+        axes[-1].set_xlabel("attempts until this guard first passes",
+                            fontsize=9, color=_FIG_MUTED)
+        fig.suptitle("Attempts to satisfy each guard (per-guard strictness)",
+                     x=0.02, ha="left", fontsize=11, color=_FIG_INK)
+        fig.tight_layout(rect=[0, 0, 1, 0.99])
+        fig.savefig(os.path.join(out_dir, "convergence_by_guard.png"), dpi=150)
+        plt.close(fig)
+
+        # aggregate: mean rounds-to-first-pass per guard
+        agg = {g: (len(gfp_by_guard[g]),
+                   sum(gfp_by_guard[g]) / len(gfp_by_guard[g])) for g in guards}
+        names = sorted(agg, key=lambda k: agg[k][1])
+        means = [agg[n][1] for n in names]
+        fig, ax = plt.subplots(figsize=(7.5, 0.62 * len(names) + 1.2))
+        ax.barh([n.split("/")[-1] for n in names], means, height=0.55,
+                color=_FIG_BLUE)
+        for i, n in enumerate(names):
+            ax.text(means[i] + 0.03, i,
+                    f"{means[i]:.2f} rounds  (n={agg[n][0]})",
+                    va="center", fontsize=9, color=_FIG_INK)
+        ax.set_xlim(0, maxk + 1)
+        ax.set_title("Mean rounds to satisfy each guard (aggregate)",
+                     loc="left", fontsize=11, color=_FIG_INK, pad=10)
+        ax.tick_params(colors=_FIG_INK, labelsize=9)
+        ax.grid(axis="x", color="#e5e7eb", linewidth=0.8)
+        ax.set_axisbelow(True)
+        for s in ("top", "right", "left"):
+            ax.spines[s].set_visible(False)
+        ax.spines["bottom"].set_color("#e5e7eb")
+        fig.tight_layout()
+        fig.savefig(os.path.join(out_dir, "convergence_mean_by_guard.png"),
+                    dpi=150)
+        plt.close(fig)
+
     print(f"figures -> {out_dir}")
 
 

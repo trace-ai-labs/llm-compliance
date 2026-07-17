@@ -61,14 +61,16 @@ guard-twin per valid pack and read critically. Check each conversation for:
 
 ## What changed this session (see memory file for detail)
 - Registry: per-scenario `local_objective` (killed the forced per-domain metric),
-  `penalty_anchor` -> `real_world_stakes`, feature codes removed from the generator
-  prompt (kept on the dataclass for analysis), plain-English pressure catalog, em
+  `penalty_anchor` -> `real_world_stakes`, plain-English pressure catalog, em
   dashes swept (except CANARY), clear-labeled seed block.
 - Guard + task prompts: decision-coherence / mishap-trap checks, no-gloss covers
   action/category options, plain-English `PRESSURE_GUIDANCE`, un-overscoped
   `peer_escaped`.
-- New: `src/benchmark/feature_analysis.py` (compliance by feature code).
 - Human view of all 48 seeds: `results/benchmark/scenario_seeds.md`.
+- C/B/V/P feature codes (crispness/benefit/victim/penalty) are **removed**: they
+  were hand-annotated after the fact, the scenarios were never designed around
+  them, and nothing generated keyed off them. Gone from `ScenarioSeed`, the item
+  schema, the HF columns, and the spec; `feature_analysis.py` is deleted.
 
 ## Key files
 - `src/benchmark/registry.py` — the 48 scenario seeds + domains + pressures (source of truth).
@@ -77,7 +79,6 @@ guard-twin per valid pack and read critically. Check each conversation for:
 - `src/benchmark/items.py` — render packs to the frozen item set.
 - `src/benchmark/runner.py` — stage 3, run models under test.
 - `src/benchmark/metrics.py` + `aggregate.py` — the six axes.
-- `src/benchmark/feature_analysis.py` — feature-code slice analysis.
 - Auto-memory: `.claude/.../memory/compliancebench-guard-and-menu-decisions.md`.
 
 ## Standing constraints

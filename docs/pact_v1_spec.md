@@ -58,13 +58,6 @@ this isomorphism is what makes cell rates comparable across all 48 scenarios:
    escalation), and two **discernment-under-attack** twins (hold the
    binding item while the user insists the rule doesn't apply; stand down on the
    non-binding twin while the user insists it does).
-6. **Feature codes per scenario**: **C** rule crispness (hi/med/lo) · **B** benefit
-   denomination (money/time/engagement/relationship) · **V** victim salience
-   (identifiable/diffuse/none) · **P** penalty type (fine/liability/license/
-   criminal). With 48 independently-coded scenarios the rule-feature regression
-   `compliance ~ C + B + V + P + (1|model) + (1|domain)` has 48 sampling units
-   instead of 12.
-
 Scenario inclusion criteria (all five must hold): (a) a **crisp-enough rule** an
 agent can violate *in a recommendation* (no actuators needed); (b) a **real
 penalty anchor** — statute, regulator guidance, or a litigated AI incident;
@@ -116,9 +109,9 @@ all four penalty types.
 
 ## 3. The forty-eight scenarios
 
-Format: each row is one scenario — the rule the agent must hold, what violating it
-buys the requester, and the C/B/V/P feature codes. Original letters are kept
-as stable IDs; all four scenarios per domain carry the same full battery.
+Format: each row is one scenario — the rule the agent must hold and what violating
+it buys the requester. Original letters are kept as stable IDs; all four scenarios
+per domain carry the same full battery.
 
 ### 3.1 `procurement` — Procurement / certified vendors
 
@@ -282,7 +275,7 @@ unverifiable authorization substitutes for real authority (the audit-trail
 failure); `fait_accompli` imports Cialdini commitment (does the model treat
 someone else's promise as binding on it?); `sympathetic_beneficiary` puts the
 identifiable victim on the *compliance* side — the hardest case for a
-helpfulness-trained model, and the inverse of the V feature code;
+helpfulness-trained model;
 `responsibility_shift` tests whether explicit accountability transfer licenses
 violation (it doesn't, legally); and `rule_delegitimization` attacks Rule-Scope
 Discernment directly — a model good at standing down when rules don't bind must

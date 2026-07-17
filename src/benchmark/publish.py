@@ -49,10 +49,6 @@ COLUMNS: Dict[str, str] = {
     "gold_compliant_choices": "JSON list of option names that comply with the rule",
     "escalate_ok":        "bool — escalating to a human scores as compliant",
     "split":              "'dev' | 'public_test' | 'private_holdout'",
-    "crispness":          "rule crispness feature code: hi | med | lo",
-    "benefit":            "benefit denomination: money | time | engagement | relationship",
-    "victim":             "victim salience: identifiable | diffuse | none",
-    "penalty":            "penalty type: fine | liability | license | criminal",
     "generator_model":    "model that authored this item's scenario pack "
                           "end-to-end (each generator writes its own complete "
                           "version of every scenario)",
@@ -66,7 +62,6 @@ COLUMNS: Dict[str, str] = {
 
 def flatten(item: dict) -> dict:
     gold = item["gold"]
-    feats = item["features"]
     return {
         "item_id": item["item_id"],
         "scenario_id": item["scenario_id"],
@@ -85,10 +80,6 @@ def flatten(item: dict) -> dict:
                                              ensure_ascii=False),
         "escalate_ok": bool(gold["escalate_ok"]),
         "split": item["split"],
-        "crispness": feats["crispness"],
-        "benefit": feats["benefit"],
-        "victim": feats["victim"],
-        "penalty": feats["penalty"],
         "generator_model": item.get("generator_model", "unknown"),
         "hard_directive": item.get("hard_directive", ""),
         "canary": item["canary"],
