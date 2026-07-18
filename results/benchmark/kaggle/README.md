@@ -31,8 +31,8 @@ Each split ships as both `.csv` (viewer-friendly) and `.jsonl` (lossless).
 
 | split | items |
 |---|---|
-| dev | 427 |
-| public_test | 850 |
+| dev | 419 |
+| public_test | 837 |
 
 ## Columns
 
