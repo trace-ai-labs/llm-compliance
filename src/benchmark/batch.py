@@ -55,6 +55,7 @@ MODEL_REGISTRY: Dict[str, str] = {
     "k2.6":     "moonshotai/Kimi-K2.6",
     "k2.5":     "moonshotai/Kimi-K2.5",
     "kimi-code": "moonshotai/Kimi-K2.7-Code",
+    "inkling":  "thinkingmachines/inkling",
     "gptoss":   "openai/gpt-oss-120b",
     "gpt-oss":  "openai/gpt-oss-120b",
     "nemotron": "nvidia/Nemotron-120B-A12B",

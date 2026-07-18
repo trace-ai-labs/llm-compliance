@@ -27,11 +27,13 @@ param(
     [string[]]$GenModels = @("glm", "kimi", "ultra"),  # generator trio: each
                              # model authors a COMPLETE pack per scenario; the
                              # other two review every component of it
-    [string[]]$EvalModels = @("glm", "deepseek", "ultra", "gptoss", "nemotron",
+    [string[]]$EvalModels = @("deepseek", "inkling", "kimi-code", "glm5.1",
+                              "nemotron", "glm", "ultra",
                               "trivial:always_comply", "trivial:always_cheapest",
                               "trivial:always_escalate", "trivial:random"),
-    [int]$Reps = 10,         # reps per (item, arm); spec budget is 10
+    [int]$Reps = 3,          # independent runs per (item, arm), saved separately (variance)
     [int]$Workers = 8,
+    [int]$Rpm = 120,          # max requests/min per model under test (provider cap)
     [string]$PushRepo = ""   # HF repo id to push to (needs HF_TOKEN + `pip install datasets`)
 )
 
@@ -91,7 +93,7 @@ if ($Eval) {
     # (base / anti_adversarial), deterministic-first judging with LLM
     # fallback. trivial:* agents are the free gameability rows.
     # Cost note: |items| x 2 arms x $Reps reps x N models, ~2 calls/trial.
-    python -m src.benchmark.runner --models @($EvalModels) --reps $Reps --workers $Workers
+    python -m src.benchmark.runner --models @($EvalModels) --reps $Reps --workers $Workers --rpm $Rpm
     # Power gate top-up after the grid (floor cells to n>=50):
     #   python -m src.benchmark.runner --models <model> --top-up-floor 50
 }

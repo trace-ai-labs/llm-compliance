@@ -40,8 +40,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, List, Optional, Tuple
 
-from src.benchmark.batch import (BatchRequest, DEFAULT_EXTRACT_MODEL, call_one,
-                                 get_api_key, resolve_model)
+from src.benchmark.batch import (BatchRequest, DEFAULT_EXTRACT_MODEL, _RateLimiter,
+                                 call_one, get_api_key, resolve_model)
 from src.benchmark.items import DEFAULT_OUT as ITEMS_PATH
 from src.benchmark.items import load_items
 from src.benchmark.judges import (OUTCOME_JUDGE_SYS, extract_choice,
@@ -117,6 +117,14 @@ def trivial_response(policy: str, item: dict, rng: random.Random) -> str:
 
 # ── One trial ────────────────────────────────────────────────────────────────
 
+# Process-wide limiter for the gpt-oss extractor. The extractor is a SHARED model
+# across every eval model's trials, so its own rpm cap is a global bottleneck;
+# this caps extractor calls across the whole run, independent of the per-model
+# limiter. Set in main(); only the residual trials (deterministic extraction
+# missed) ever hit it, so it rarely binds when models run one at a time.
+_EXTRACT_LIMITER: Optional["_RateLimiter"] = None
+
+
 def _judge_turn(tid: str, turn: int, response: str, item: dict,
                 judge_model: str, api_key: Optional[str]) -> Tuple[Optional[str], str]:
     """Returns (choice, judge_used) where judge_used ∈ rule|llm|none."""
@@ -127,6 +135,8 @@ def _judge_turn(tid: str, turn: int, response: str, item: dict,
     if api_key is None:  # trivial agents never reach here, but stay safe
         return None, "none"
     req = outcome_judge_request(tid, response, names, judge_model, turn)
+    if _EXTRACT_LIMITER:
+        _EXTRACT_LIMITER.wait()
     res = call_one(req, api_key)
     if not res.ok:
         return None, "llm"
@@ -135,7 +145,7 @@ def _judge_turn(tid: str, turn: int, response: str, item: dict,
 
 def run_trial(item: dict, model: str, arm: str, rep: int, judge_model: str,
               api_key: Optional[str], max_tokens: int,
-              temperature: float) -> dict:
+              temperature: float, limiter: Optional["_RateLimiter"] = None) -> dict:
     tid = trial_id(item["item_id"], arm, rep)
     system = item["system_prompt"] + arm_suffix(item, arm)
     trivial = model.startswith(TRIVIAL_PREFIX)
@@ -145,6 +155,8 @@ def run_trial(item: dict, model: str, arm: str, rep: int, judge_model: str,
     if trivial:
         t1_response = trivial_response(model[len(TRIVIAL_PREFIX):], item, rng)
     else:
+        if limiter:
+            limiter.wait()          # cap calls to the model under test at --rpm
         res = call_one(BatchRequest(
             id=f"{tid}.t1", model=model, temperature=temperature,
             max_tokens=max_tokens,
@@ -183,6 +195,8 @@ def run_trial(item: dict, model: str, arm: str, rep: int, judge_model: str,
     if trivial:
         t2_response = trivial_response(model[len(TRIVIAL_PREFIX):], item, rng)
     else:
+        if limiter:
+            limiter.wait()
         res = call_one(BatchRequest(
             id=f"{tid}.t2", model=model, temperature=temperature,
             max_tokens=max_tokens,
@@ -261,7 +275,7 @@ def floor_topup_jobs(items: List[dict], out_path: str,
 def run_model(model: str, items: List[dict], arms: List[str], reps: int,
               judge_model: str, workers: int, max_tokens: int,
               temperature: float, trials_dir: str = TRIALS_DIR,
-              dry_run: bool = False, top_up_floor: int = 0) -> None:
+              dry_run: bool = False, top_up_floor: int = 0, rpm: int = 0) -> None:
     out_path = os.path.join(trials_dir, f"{safe_name(model)}.jsonl")
     done = _load_done(out_path)
     if top_up_floor:
@@ -279,10 +293,14 @@ def run_model(model: str, items: List[dict], arms: List[str], reps: int,
     os.makedirs(trials_dir, exist_ok=True)
     lock = threading.Lock()
     n_done = 0
+    # one limiter per model: run_model handles a single model at a time, so this
+    # caps calls TO THAT MODEL at --rpm (default 120) across all worker threads,
+    # which keeps us under a 120 rpm provider cap and avoids failed gens.
+    limiter = _RateLimiter(rpm) if not trivial else None
 
     def _work(item: dict, arm: str, rep: int) -> dict:
         return run_trial(item, model, arm, rep, judge_model, api_key,
-                         max_tokens, temperature)
+                         max_tokens, temperature, limiter)
 
     with ThreadPoolExecutor(max_workers=1 if trivial else workers) as ex:
         futures = {ex.submit(_work, it, arm, rep): (it, arm, rep)
@@ -328,7 +346,9 @@ def main() -> None:
     ap.add_argument("--models", nargs="+", required=True,
                     help="model aliases / OpenRouter ids / trivial:<policy>")
     ap.add_argument("--items", default=ITEMS_PATH)
-    ap.add_argument("--reps", type=int, default=5)
+    ap.add_argument("--reps", type=int, default=3,
+                    help="independent runs per (item, arm); each saved as its "
+                         "own trial row for variance measurement")
     ap.add_argument("--arms", nargs="+", default=list(ARMS),
                     choices=list(ALL_ARMS),
                     help="base/directive are the scored arms; moderate is the "
@@ -344,12 +364,20 @@ def main() -> None:
     ap.add_argument("--judge-model", default=DEFAULT_EXTRACT_MODEL, type=resolve_model,
                     help="Stage-B outcome extractor (small/cheap; tau-gated)")
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--rpm", type=int, default=120,
+                    help="max requests/min PER MODEL under test (provider cap is "
+                         "120 on some models); 0 disables the limiter")
+    ap.add_argument("--extract-rpm", type=int, default=120,
+                    help="max requests/min to the shared gpt-oss extractor "
+                         "(global across all models); 0 disables")
     ap.add_argument("--max-tokens", type=int, default=1024)
     ap.add_argument("--temperature", type=float, default=1.0)
     ap.add_argument("--trials-dir", default=TRIALS_DIR)
     ap.add_argument("--dry-run", action="store_true", help="count trials, no calls")
     args = ap.parse_args()
 
+    global _EXTRACT_LIMITER
+    _EXTRACT_LIMITER = _RateLimiter(args.extract_rpm)
     items = filter_items(load_items(args.items), args.groups, args.scenarios,
                          args.split)
     print(f"{len(items)} items after filters")
@@ -359,7 +387,7 @@ def main() -> None:
             assert m[len(TRIVIAL_PREFIX):] in TRIVIAL_AGENTS, f"unknown {m}"
         run_model(model, items, args.arms, args.reps, args.judge_model,
                   args.workers, args.max_tokens, args.temperature,
-                  args.trials_dir, args.dry_run, args.top_up_floor)
+                  args.trials_dir, args.dry_run, args.top_up_floor, args.rpm)
 
 
 if __name__ == "__main__":

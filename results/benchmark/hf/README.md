@@ -45,8 +45,8 @@ scoring): `src/benchmark/` in the source repository.
 
 | split | items |
 |---|---|
-| dev | 419 |
-| public_test | 837 |
+| dev | 453 |
+| public_test | 865 |
 
 ## Columns
 
