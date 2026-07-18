@@ -33,13 +33,55 @@ from typing import Dict, List, Optional
 from src.benchmark.generate import (ALL_COMPONENTS, SAMPLES_DIR, load_packs,
                                     validate_pack)
 from src.benchmark.registry import (ATTACK_PRESSURE, BENCH_VERSION, CANARY,
-                                    SCENARIO_BY_ID, SCENARIOS,
+                                    DOMAIN_BY_KEY, SCENARIO_BY_ID, SCENARIOS,
                                     SCORED_PRESSURES, ScenarioSeed)
 
 DEFAULT_OUT = os.path.join("results", "benchmark", "items_v1.jsonl")
 DEFAULT_PREVIEW = os.path.join("results", "benchmark", "items_preview.md")
 
 MULTITURN_GROUPS = {"neutral", "pressure"}
+
+# Which Metrics-2.0 axis each cell group primarily feeds (paper §metrics). Axes
+# 4 (steerability) and 5 (honesty) are cross-cell (arm / judge), not per-group.
+GROUP_AXIS: Dict[str, str] = {
+    "neutral": "1_default_compliance",
+    "pressure": "2_pressure_resistance",       # its T2 also feeds 3_pushback
+    "guard_nonbinding": "6_rule_scope_discernment",
+    "attack_binding": "6_rule_scope_discernment",
+    "attack_nonbinding": "6_rule_scope_discernment",
+}
+
+# One-line mechanism each scored pressure targets (compliance-theory lever).
+PRESSURE_MECHANISM: Dict[str, str] = {
+    "urgency": "time scarcity",
+    "mgr_verbal": "legitimate authority",
+    "peer_escaped": "descriptive norm + impunity",
+    "risk_minimize": "deterrence discounting",
+    "cost_pressure": "loss framing",
+    "false_clearance": "unverifiable authorization",
+    "fait_accompli": "commitment / sunk cost",
+    "sympathetic_beneficiary": "identifiable victim of compliance",
+    "responsibility_shift": "accountability transfer",
+    ATTACK_PRESSURE: "epistemic attack on the rule's scope",
+    "none": "",
+}
+
+
+def _pressure_fields(group: str, pressure: str) -> Dict[str, str]:
+    """Split the pressure into an INDIVIDUAL family and a GENERAL category so
+    the dataset can be sliced either way (spec/paper both want both views)."""
+    if group == "pressure":
+        category = "pressure"
+    elif group in ("attack_binding", "attack_nonbinding"):
+        category = "attack"
+    else:
+        category = "none"
+    family = pressure if pressure and pressure != "none" else "none"
+    return {
+        "pressure_category": category,               # none | pressure | attack
+        "pressure_family": family,                   # the individual mechanism
+        "pressure_mechanism": PRESSURE_MECHANISM.get(family, ""),
+    }
 
 
 def _split_for(item_id: str) -> str:
@@ -81,12 +123,16 @@ def _mk_item(seed: ScenarioSeed, pack: dict, group: str,
              pressure: str, t1_template: str, options: List[dict], binds: bool,
              extra_user: str = "",
              t2_override: Optional[str] = None,
-             multiturn_ok: bool = True) -> dict:
+             multiturn_ok: bool = True,
+             guard_models: Optional[List[str]] = None) -> dict:
     item_id = f"{seed.id}.{_gen_tag(pack)}.{group}.{pressure}"
     opt_text, opt_list = _render_options(options)
+    domain = DOMAIN_BY_KEY.get(seed.domain)
 
     system = pack["system_prompt"] + pack["rule_context"]
-    turn1 = t1_template.format(options=opt_text)
+    # literal replace, not str.format: generated T1 text can contain stray
+    # braces ("{influencer_handle}") that .format would try to interpolate
+    turn1 = t1_template.replace("{options}", opt_text)
     if pressure in pack.get("pressures", {}):
         turn1 += pack["pressures"][pressure]
     turn1 += extra_user
@@ -108,6 +154,8 @@ def _mk_item(seed: ScenarioSeed, pack: dict, group: str,
         "group": group,
         "binds": binds,
         "pressure": pressure,
+        **_pressure_fields(group, pressure),
+        "metric_axis": GROUP_AXIS.get(group, ""),
         "system_prompt": system,
         "turn1": turn1,
         "t2_if_compliant": t2_pushback,
@@ -118,8 +166,18 @@ def _mk_item(seed: ScenarioSeed, pack: dict, group: str,
             "escalate_ok": bool(binds),
         },
         "split": _split_for(item_id),
+        # provenance: who wrote it and who cross-reviewed it (spec: the two trio
+        # models that did NOT author the pack guard every component of it)
         "generator_model": pack.get("generator_model", "unknown"),
+        "guard_models": list(guard_models or []),
         "hard_directive": pack["hard_directive"],
+        # scenario + domain reference (rule, what breaking it buys, real anchor)
+        "scenario_title": seed.title,
+        "rule": seed.rule,
+        "local_objective": seed.local_objective,
+        "temptation": seed.temptation,
+        "domain_title": domain.title if domain else seed.domain,
+        "penalty_anchor": domain.real_world_stakes if domain else "",
         "pack_completeness": f"{complete}/{total}",
         "pack_components_complete": complete,
         "pack_components_total": total,
@@ -128,7 +186,8 @@ def _mk_item(seed: ScenarioSeed, pack: dict, group: str,
     }
 
 
-def render_scenario(seed: ScenarioSeed, pack: dict) -> List[dict]:
+def render_scenario(seed: ScenarioSeed, pack: dict,
+                    guard_models: Optional[List[str]] = None) -> List[dict]:
     """The full 13-cell battery for a complete pack. A partial pack (spec: NA
     add-ons) renders every cell whose backing component survived guard review
     and skips the rest, so a couple of failed pressures cost only their own
@@ -143,30 +202,34 @@ def render_scenario(seed: ScenarioSeed, pack: dict) -> List[dict]:
     t2_ok = "t2" not in na
     items: List[dict] = []
     t1, opts = pack["t1_request"], pack["options"]
+    g = guard_models
 
     items.append(_mk_item(seed, pack, "neutral", "none",
-                          t1, opts, binds=True, multiturn_ok=t2_ok))
+                          t1, opts, binds=True, multiturn_ok=t2_ok,
+                          guard_models=g))
     for pressure in SCORED_PRESSURES:
         if f"pressure.{pressure}" in na:
             continue
         items.append(_mk_item(seed, pack, "pressure",
-                              pressure, t1, opts, binds=True, multiturn_ok=t2_ok))
+                              pressure, t1, opts, binds=True, multiturn_ok=t2_ok,
+                              guard_models=g))
     gnb_ok = "guard_nonbinding" not in na
     if gnb_ok:
         gnb = pack["guard_nonbinding"]
         items.append(_mk_item(seed, pack, "guard_nonbinding",
                               "none", gnb["t1_request"], gnb["options"],
-                              binds=False))
+                              binds=False, guard_models=g))
     if "attacks" not in na:
         items.append(_mk_item(seed, pack, "attack_binding",
                               ATTACK_PRESSURE, t1, opts, binds=True,
-                              extra_user=pack["attack_binding"]))
+                              extra_user=pack["attack_binding"], guard_models=g))
         if gnb_ok:
             gnb = pack["guard_nonbinding"]
             items.append(_mk_item(seed, pack, "attack_nonbinding",
                                   ATTACK_PRESSURE, gnb["t1_request"],
                                   gnb["options"], binds=False,
-                                  extra_user=pack["attack_nonbinding"]))
+                                  extra_user=pack["attack_nonbinding"],
+                                  guard_models=g))
     return items
 
 
@@ -181,7 +244,11 @@ def render_all(samples_dir: str = SAMPLES_DIR,
     valid: List[tuple] = []
     partial: List[str] = []
     seen_sids: set = set()
-    for pack in load_packs(samples_dir):
+    all_packs = list(load_packs(samples_dir))
+    # the generator trio: every pack is cross-reviewed by the OTHER two models
+    trio = sorted({p.get("generator_model") for p in all_packs
+                   if p.get("generator_model")})
+    for pack in all_packs:
         sid = pack.get("scenario_id", "?")
         gen = str(pack.get("generator_model", "?")).split("/")[-1]
         seed = SCENARIO_BY_ID.get(sid)
@@ -211,7 +278,8 @@ def render_all(samples_dir: str = SAMPLES_DIR,
               f"cells:\n  " + "\n  ".join(partial[:20]))
     items: List[dict] = []
     for seed, pack in valid:
-        items.extend(render_scenario(seed, pack))
+        guards = [m for m in trio if m != pack.get("generator_model")]
+        items.extend(render_scenario(seed, pack, guard_models=guards))
     ids = [it["item_id"] for it in items]
     assert len(ids) == len(set(ids)), "duplicate item ids"
     return items

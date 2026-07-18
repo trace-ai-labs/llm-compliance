@@ -36,7 +36,13 @@ COLUMNS: Dict[str, str] = {
     "group":              "cell group: neutral | pressure | guard_nonbinding | "
                           "attack_binding | attack_nonbinding",
     "binds":              "bool — whether the rule genuinely applies to this item",
-    "pressure":           "pressure family appended to turn 1, or 'none'",
+    "pressure":           "raw pressure tag on turn 1 ('urgency', the attack "
+                          "family, or 'none')",
+    "pressure_category":  "general bucket: none | pressure | attack",
+    "pressure_family":    "individual mechanism (urgency, mgr_verbal, …, "
+                          "rule_delegitimization) or 'none'",
+    "pressure_mechanism": "the compliance-theory lever the family targets",
+    "metric_axis":        "the Metrics-2.0 axis this cell primarily feeds",
     "system_prompt":      "full system prompt: deployed persona + compliance note",
     "turn1":              "user turn 1: in-character request with the option "
                           "menu (and any pressure text)",
@@ -52,9 +58,19 @@ COLUMNS: Dict[str, str] = {
     "generator_model":    "model that authored this item's scenario pack "
                           "end-to-end (each generator writes its own complete "
                           "version of every scenario)",
+    "guard_models":       "JSON list of the two trio models that cross-reviewed "
+                          "every component of this pack (scope + authenticity + "
+                          "label coherence)",
     "hard_directive":     "the scenario's anti-adversarial guardrail mandate: "
                           "append it to system_prompt to reproduce the "
                           "'anti_adversarial' arm",
+    "scenario_title":     "short human title of the scenario's rule",
+    "rule":               "the binding rule the agent must hold, in plain terms",
+    "local_objective":    "what the rule-violating option wins for the requester "
+                          "(and thus what compliance costs)",
+    "penalty_anchor":     "the real fine, case, or incident behind the domain's rule",
+    "pack_completeness":  "'x/15' — components that survived review for this pack "
+                          "(partial packs ship their surviving cells)",
     "canary":             "BIG-bench-style canary GUID — filter from training corpora",
     "version":            "benchmark version tag",
 }
@@ -69,6 +85,10 @@ def flatten(item: dict) -> dict:
         "group": item["group"],
         "binds": bool(item["binds"]),
         "pressure": item["pressure"],
+        "pressure_category": item.get("pressure_category", "none"),
+        "pressure_family": item.get("pressure_family", "none"),
+        "pressure_mechanism": item.get("pressure_mechanism", ""),
+        "metric_axis": item.get("metric_axis", ""),
         "system_prompt": item["system_prompt"],
         "turn1": item["turn1"],
         "t2_if_compliant": item["t2_if_compliant"],
@@ -81,7 +101,14 @@ def flatten(item: dict) -> dict:
         "escalate_ok": bool(gold["escalate_ok"]),
         "split": item["split"],
         "generator_model": item.get("generator_model", "unknown"),
+        "guard_models": json.dumps(item.get("guard_models", []),
+                                   ensure_ascii=False),
         "hard_directive": item.get("hard_directive", ""),
+        "scenario_title": item.get("scenario_title", ""),
+        "rule": item.get("rule", ""),
+        "local_objective": item.get("local_objective", ""),
+        "penalty_anchor": item.get("penalty_anchor", ""),
+        "pack_completeness": item.get("pack_completeness", ""),
         "canary": item["canary"],
         "version": item["version"],
     }

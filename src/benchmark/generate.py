@@ -1246,17 +1246,19 @@ def guard_figures(log_path: str = GUARD_LOG,
 
     # attempts consumed per component: accepted at the k-th attempt of this
     # log (attempt ids are lifetime counters, so normalize per component)
-    first_attempt: Dict[Tuple[str, str], int] = {}
-    accepted_raw: Dict[Tuple[str, str], int] = {}
+    # key per PACK (scenario x generator x component), so the 3 generators are
+    # not collapsed - each authored pack's component is its own convergence datum
+    first_attempt: Dict[Tuple[str, str, str], int] = {}
+    accepted_raw: Dict[Tuple[str, str, str], int] = {}
     rejected_n: Counter = Counter()
     for r in judged:
-        key = (r["scenario_id"], r["component"])
+        key = (r["scenario_id"], r.get("generator_model", "?"), r["component"])
         first_attempt[key] = min(first_attempt.get(key, 10 ** 9), r["attempt"])
         if r["accepted"]:
             accepted_raw[key] = min(accepted_raw.get(key, 10 ** 9), r["attempt"])
     accepted_at = {k: v - first_attempt[k] + 1 for k, v in accepted_raw.items()}
     for r in judged:
-        key = (r["scenario_id"], r["component"])
+        key = (r["scenario_id"], r.get("generator_model", "?"), r["component"])
         if key not in accepted_at and r["verdict"] == "FAIL":
             rejected_n[key] += 1
     if accepted_at or rejected_n:
@@ -1289,9 +1291,9 @@ def guard_figures(log_path: str = GUARD_LOG,
         return "pressure" if comp.startswith("pressure.") else comp
     acc_by_kind: Dict[str, List[int]] = {}
     na_by_kind: Counter = Counter()
-    for (sid, comp), n in accepted_at.items():
+    for (sid, gen, comp), n in accepted_at.items():
         acc_by_kind.setdefault(_kind(comp), []).append(n)
-    for (sid, comp) in rejected_n:
+    for (sid, gen, comp) in rejected_n:
         na_by_kind[_kind(comp)] += 1
     _order = ["persona", "task", "rules", "t2", "guard_nonbinding", "attacks",
               "pressure"]
@@ -1332,6 +1334,55 @@ def guard_figures(log_path: str = GUARD_LOG,
                      ha="left", fontsize=11, color=_FIG_INK)
         fig.tight_layout(rect=[0, 0, 1, 0.99])
         fig.savefig(os.path.join(out_dir, "convergence_by_component.png"),
+                    dpi=150)
+        plt.close(fig)
+
+    # same distribution, but the 9 pressure families broken out individually
+    # (the collapsed "pressure" row above hides which mechanisms drag convergence)
+    acc_by_pressure: Dict[str, List[int]] = {}
+    na_by_pressure: Counter = Counter()
+    for (sid, gen, comp), n in accepted_at.items():
+        if comp.startswith("pressure."):
+            acc_by_pressure.setdefault(comp.split(".", 1)[1], []).append(n)
+    for (sid, gen, comp) in rejected_n:
+        if comp.startswith("pressure."):
+            na_by_pressure[comp.split(".", 1)[1]] += 1
+    pkeys = [k for k in SCORED_PRESSURES
+             if k in acc_by_pressure or k in na_by_pressure]
+    if pkeys:
+        maxk = max((max(v) for v in acc_by_pressure.values() if v), default=1)
+        fig, axes = plt.subplots(len(pkeys), 1,
+                                 figsize=(6.5, 1.2 * len(pkeys) + 0.6),
+                                 sharex=True)
+        if len(pkeys) == 1:
+            axes = [axes]
+        for ax, k in zip(axes, pkeys):
+            vals = acc_by_pressure.get(k, [])
+            counts = [vals.count(i) for i in range(1, maxk + 1)]
+            ax.bar(range(1, maxk + 1), counts, width=0.7, color=_FIG_BLUE)
+            for i, c in enumerate(counts, start=1):
+                if c:
+                    ax.text(i, c, str(c), ha="center", va="bottom",
+                            fontsize=8, color=_FIG_INK)
+            mean = (sum(vals) / len(vals)) if vals else 0.0
+            first = (100 * vals.count(1) / len(vals)) if vals else 0.0
+            ax.set_title(f"{k}  -  n={len(vals)}, mean {mean:.2f} attempts, "
+                         f"{first:.0f}% first-try, NA={na_by_pressure[k]}",
+                         loc="left", fontsize=9.5, color=_FIG_INK)
+            ax.set_ylabel("packs", fontsize=8, color=_FIG_MUTED)
+            ax.set_xticks(range(1, maxk + 1))
+            ax.tick_params(colors=_FIG_INK, labelsize=8)
+            ax.grid(axis="y", color="#e5e7eb", linewidth=0.8)
+            ax.set_axisbelow(True)
+            for s in ("top", "right", "left"):
+                ax.spines[s].set_visible(False)
+            ax.spines["bottom"].set_color("#e5e7eb")
+        axes[-1].set_xlabel("attempts to acceptance (1 = passed first try)",
+                            fontsize=9, color=_FIG_MUTED)
+        fig.suptitle("Attempts to converge by pressure family", x=0.02,
+                     ha="left", fontsize=11, color=_FIG_INK)
+        fig.tight_layout(rect=[0, 0, 1, 0.99])
+        fig.savefig(os.path.join(out_dir, "convergence_by_pressure.png"),
                     dpi=150)
         plt.close(fig)
 
@@ -1421,12 +1472,15 @@ def guard_figures(log_path: str = GUARD_LOG,
         n_total = len(ALL_COMPONENTS)
         comp_counts: Counter = Counter()          # completeness value -> #packs
         na_kind: Counter = Counter()              # component kind -> #NA
+        na_detail: Counter = Counter()            # kind, but pressures broken out
         for p in packs:
             na = p.get("_na_components") or []
             done = p.get("_components_complete", n_total - len(na))
             comp_counts[done] += 1
             for c in na:
                 na_kind[_kind(c)] += 1
+                na_detail[c.split(".", 1)[1] if c.startswith("pressure.")
+                          else _kind(c)] += 1
         whole = comp_counts.get(n_total, 0)
         xs = list(range(min(comp_counts), n_total + 1))
         counts = [comp_counts.get(x, 0) for x in xs]
@@ -1472,6 +1526,28 @@ def guard_figures(log_path: str = GUARD_LOG,
             ax.spines["bottom"].set_color("#e5e7eb")
             fig.tight_layout()
             fig.savefig(os.path.join(out_dir, "na_by_component.png"), dpi=150)
+            plt.close(fig)
+
+        # same, but the 9 pressure families broken out individually (the "pressure"
+        # bar above hides which mechanisms are hardest to author cleanly)
+        if na_detail:
+            names = sorted(na_detail, key=lambda k: na_detail[k])
+            vals = [na_detail[n] for n in names]
+            fig, ax = plt.subplots(figsize=(7.5, 0.5 * len(names) + 1.2))
+            ax.barh(names, vals, height=0.6, color=_FIG_RED)
+            for i, n in enumerate(names):
+                ax.text(vals[i] + 0.05, i, str(vals[i]), va="center",
+                        fontsize=9, color=_FIG_INK)
+            ax.set_title("NA (dropped) cells by component, pressures broken out",
+                         loc="left", fontsize=11, color=_FIG_INK, pad=10)
+            ax.tick_params(colors=_FIG_INK, labelsize=9)
+            ax.grid(axis="x", color="#e5e7eb", linewidth=0.8)
+            ax.set_axisbelow(True)
+            for s in ("top", "right", "left"):
+                ax.spines[s].set_visible(False)
+            ax.spines["bottom"].set_color("#e5e7eb")
+            fig.tight_layout()
+            fig.savefig(os.path.join(out_dir, "na_by_pressure.png"), dpi=150)
             plt.close(fig)
 
     print(f"figures -> {out_dir}")
