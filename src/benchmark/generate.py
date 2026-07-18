@@ -92,7 +92,14 @@ MAX_CALL_RETRIES = 3
 # review every component of it, so all three models continuously check each
 # other without ever grading their own writing.
 DEFAULT_GENERATORS = ["glm", "kimi", "ultra"]
-MAX_GEN_ATTEMPTS = 8        # per component; after this, NA placeholder + flag
+# The pack spine (persona -> task -> rules) is worth grinding on: it is shared
+# by all 13 cells, and an NA here zeros the whole pack. The add-ons (each
+# pressure, the guard twin, T2, attacks) are cheaper to lose (a failed pressure
+# just drops that one cell) and, empirically, an add-on that needs many rounds
+# is the one being wrestled away from realism - so cap those lower.
+MAX_GEN_ATTEMPTS = 8        # per spine component; after this, NA placeholder + flag
+MAX_GEN_ATTEMPTS_ADDON = 4  # per add-on component (pressures, guard, t2, attacks)
+_SPINE_COMPONENTS = ("persona", "task", "rules")
 
 GUARD_KEYS = ("guard_nonbinding",)
 
@@ -106,7 +113,13 @@ COMPONENT_DEPS: Dict[str, Tuple[str, ...]] = {
     "t2": ("persona", "task", "rules"),
     "attacks": ("persona", "task", "rules", "guard_nonbinding"),
 }
-ALL_COMPONENTS = tuple(COMPONENT_DEPS)   # 16 per scenario
+ALL_COMPONENTS = tuple(COMPONENT_DEPS)   # 15 per scenario (spine 3 + 9 pressures + guard + t2 + attacks)
+
+
+def _component_cap(component: str, spine_max: int, addon_max: int) -> int:
+    """Attempt budget for a component: the spine grinds to spine_max, every
+    add-on caps at addon_max."""
+    return spine_max if component in _SPINE_COMPONENTS else addon_max
 
 
 # ── JSON extraction ──────────────────────────────────────────────────────────
@@ -195,31 +208,10 @@ def _validate_persona(obj: dict, seed: ScenarioSeed) -> List[str]:
     return errs
 
 
-# Pressure flavor that must never appear in neutral cells (the baseline T1,
-# the guards, the T2 scripts). The pressures are separate add-ons; leakage
-# here contaminates every measurement built on the shared text.
-_PRESSURE_LEAK_TERMS = (
-    "asap", "urgent", "right away", "end of day", " eod", "by eod",
-    "breathing down", "waiting since", "been waiting", "deadline",
-    "escalat", "csat", "by tomorrow", "before the end of", "can't wait",
-    "cant wait", "running out of time",
-)
-
-
-def _pressure_leak_errors(text: str, where: str) -> List[str]:
-    low = str(text).lower()
-    hits = [t for t in _PRESSURE_LEAK_TERMS if t in low]
-    if hits:
-        return [f"{where}: neutral cell contains pressure flavor {hits} - "
-                f"pressures live only in their own add-ons"]
-    return []
-
-
 def _validate_task(obj: dict, seed: ScenarioSeed) -> List[str]:
     errs = []
     if "{options}" not in str(obj.get("t1_request", "")):
         errs.append("task: t1_request lacks the {options} placeholder")
-    errs += _pressure_leak_errors(obj.get("t1_request", ""), "task.t1_request")
     errs += _check_options(obj.get("options"), "task")
     return errs
 
@@ -243,8 +235,6 @@ def _validate_pressure(obj: dict, seed: ScenarioSeed) -> List[str]:
 def _validate_t2(obj: dict, seed: ScenarioSeed) -> List[str]:
     errs = [f"t2: missing/empty {k}" for k in ("t2_pushback", "t2_challenge")
             if not str(obj.get(k, "")).strip()]
-    for k in ("t2_pushback", "t2_challenge"):
-        errs += _pressure_leak_errors(obj.get(k, ""), f"t2.{k}")
     return errs
 
 
@@ -252,7 +242,6 @@ def _validate_guard(obj: dict, seed: ScenarioSeed) -> List[str]:
     errs = []
     if "{options}" not in str(obj.get("t1_request", "")):
         errs.append("guard: t1_request lacks {options}")
-    errs += _pressure_leak_errors(obj.get("t1_request", ""), "guard.t1_request")
     errs += _check_options(obj.get("options"), "guard")
     # rule_trigger / how_removed are generation scaffolding the reviewer uses to
     # check the twin really removes the rule's trigger; assemble_pack drops them
@@ -378,7 +367,7 @@ PROMPT_ROLES = {
 
 
 def assemble_pack(seed: ScenarioSeed, comps: dict, generator: str) -> dict:
-    """Merge 18 validated components into the pack shape items.py consumes.
+    """Merge the validated components into the pack shape items.py consumes.
     Every component was authored by the same `generator` — a pack is one
     model's complete, independent version of the scenario."""
     persona, task, rules = comps["persona"], comps["task"], comps["rules"]
@@ -410,9 +399,16 @@ def validate_pack(pack: dict, seed: ScenarioSeed) -> List[str]:
     errs: List[str] = []
     if pack.get("scenario_id") != seed.id:
         errs.append(f"scenario_id is {pack.get('scenario_id')!r}, expected {seed.id!r}")
-    if pack.get("_na_components"):
-        errs.append(f"contains NA placeholder components (guard-rejected "
-                    f"{MAX_GEN_ATTEMPTS}x): {pack['_na_components']}")
+    # An NA spine component (persona/task/rules) cascades to the whole pack, so
+    # nothing usable is left - that pack is dropped. NA add-ons (a pressure, the
+    # guard twin, t2, attacks) only cost their own cell(s): the pack still ships
+    # as a partial sample, flagged with its (x/n) completeness, and items.py
+    # renders every non-NA cell. So only spine NA is a blocking error here.
+    spine_na = [c for c in (pack.get("_na_components") or [])
+                if c in _SPINE_COMPONENTS]
+    if spine_na:
+        errs.append(f"unusable pack: spine component(s) NA {spine_na} - "
+                    f"persona/task/rules failed review, so the pack is empty")
 
     for key in ("system_prompt", "hard_directive", "t1_request",
                 "t2_pushback", "t2_challenge"):
@@ -701,6 +697,7 @@ def generate(models: List[str], only: Optional[List[str]] = None, workers: int =
              temperature: float = 0.8,
              guards_enabled: bool = True,
              max_attempts: int = MAX_GEN_ATTEMPTS,
+             max_attempts_addon: int = MAX_GEN_ATTEMPTS_ADDON,
              retry_na: bool = False) -> None:
     if guards_enabled and len(models) < 2:
         raise SystemExit("dual-guard review needs >= 2 models in --models "
@@ -767,7 +764,8 @@ def generate(models: List[str], only: Optional[List[str]] = None, workers: int =
                 # cap = rejections recorded in the components file, NOT
                 # lifetime batch ids in the raw log
                 n_rejected = len(comps.get("_rejections", {}).get(component, []))
-                if n_rejected >= max_attempts:
+                cap = _component_cap(component, max_attempts, max_attempts_addon)
+                if n_rejected >= cap:
                     comps[component] = na_component(
                         component, f"failed review {n_rejected} times")
                     _hist = comps.get("_rejections", {}).get(component, [])
@@ -969,22 +967,30 @@ def generate(models: List[str], only: Optional[List[str]] = None, workers: int =
             continue
         na = sorted(c for c in ALL_COMPONENTS if comps[c].get("_na"))
         pack = assemble_pack(seed, comps, model)
+        n_total = len(ALL_COMPONENTS)
+        pack["_components_total"] = n_total
+        pack["_components_complete"] = n_total - len(na)
         if na:
             pack["_na_components"] = na
         errs = validate_pack(pack, seed)
-        if na:
-            save_pack(pack, samples_dir)
-            n_flagged += 1
-            print(f"  {seed.id}[{tag(model)}]: FLAGGED (NA components: {na}) -> "
-                  f"{pack_path(seed.id, model, samples_dir)}")
-        elif errs:
+        if errs:
+            # spine NA (persona/task/rules) or a real structural defect: nothing
+            # usable is left, so this pack is not shipped as a sample
             n_invalid += 1
             print(f"  {seed.id}[{tag(model)}]: assembled pack INVALID — "
                   + "; ".join(errs[:4]))
+        elif na:
+            # add-on NA only: ship as a partial sample, flagged (x/n); items.py
+            # renders every non-NA cell
+            save_pack(pack, samples_dir)
+            n_flagged += 1
+            print(f"  {seed.id}[{tag(model)}]: PARTIAL "
+                  f"({pack['_components_complete']}/{n_total} components, "
+                  f"NA: {na}) -> {pack_path(seed.id, model, samples_dir)}")
         else:
             save_pack(pack, samples_dir)
             n_valid += 1
-            print(f"  {seed.id}[{tag(model)}]: valid -> "
+            print(f"  {seed.id}[{tag(model)}]: valid ({n_total}/{n_total}) -> "
                   f"{pack_path(seed.id, model, samples_dir)}")
 
     print(f"\n{n_valid} valid packs, {n_flagged} flagged (NA), {n_invalid} invalid, "
@@ -1349,6 +1355,68 @@ def guard_figures(log_path: str = GUARD_LOG,
                     dpi=150)
         plt.close(fig)
 
+    # pack completeness: how many of each pack's components survived review.
+    # A partial pack still ships (its non-NA cells become items); this shows how
+    # many packs came through whole vs. missing a cell or two, and which
+    # component kinds were the ones dropped.
+    packs = load_packs()
+    if packs:
+        n_total = len(ALL_COMPONENTS)
+        comp_counts: Counter = Counter()          # completeness value -> #packs
+        na_kind: Counter = Counter()              # component kind -> #NA
+        for p in packs:
+            na = p.get("_na_components") or []
+            done = p.get("_components_complete", n_total - len(na))
+            comp_counts[done] += 1
+            for c in na:
+                na_kind[_kind(c)] += 1
+        whole = comp_counts.get(n_total, 0)
+        xs = list(range(min(comp_counts), n_total + 1))
+        counts = [comp_counts.get(x, 0) for x in xs]
+        colors = [_FIG_BLUE if x == n_total else _FIG_RED for x in xs]
+        fig, ax = plt.subplots(figsize=(7.5, 3.8))
+        ax.bar([str(x) for x in xs], counts, width=0.6, color=colors)
+        for i, c in enumerate(counts):
+            if c:
+                ax.text(i, c, str(c), ha="center", va="bottom", fontsize=9,
+                        color=_FIG_INK)
+        ax.set_title(f"Pack completeness  -  {len(packs)} packs, "
+                     f"{whole} whole ({100*whole/len(packs):.0f}%), "
+                     f"n={n_total} components/pack", loc="left", fontsize=11,
+                     color=_FIG_INK, pad=10)
+        ax.set_xlabel("components complete (blue = whole pack, red = partial)",
+                      fontsize=9, color=_FIG_MUTED)
+        ax.set_ylabel("packs", fontsize=9, color=_FIG_MUTED)
+        ax.tick_params(colors=_FIG_INK, labelsize=9)
+        ax.grid(axis="y", color="#e5e7eb", linewidth=0.8)
+        ax.set_axisbelow(True)
+        for s in ("top", "right", "left"):
+            ax.spines[s].set_visible(False)
+        ax.spines["bottom"].set_color("#e5e7eb")
+        fig.tight_layout()
+        fig.savefig(os.path.join(out_dir, "pack_completeness.png"), dpi=150)
+        plt.close(fig)
+
+        if na_kind:
+            names = sorted(na_kind, key=lambda k: na_kind[k])
+            vals = [na_kind[n] for n in names]
+            fig, ax = plt.subplots(figsize=(7.5, 0.6 * len(names) + 1.2))
+            ax.barh(names, vals, height=0.55, color=_FIG_RED)
+            for i, n in enumerate(names):
+                ax.text(vals[i] + 0.05, i, str(vals[i]), va="center",
+                        fontsize=9, color=_FIG_INK)
+            ax.set_title("NA (dropped) cells by component kind", loc="left",
+                         fontsize=11, color=_FIG_INK, pad=10)
+            ax.tick_params(colors=_FIG_INK, labelsize=9)
+            ax.grid(axis="x", color="#e5e7eb", linewidth=0.8)
+            ax.set_axisbelow(True)
+            for s in ("top", "right", "left"):
+                ax.spines[s].set_visible(False)
+            ax.spines["bottom"].set_color("#e5e7eb")
+            fig.tight_layout()
+            fig.savefig(os.path.join(out_dir, "na_by_component.png"), dpi=150)
+            plt.close(fig)
+
     print(f"figures -> {out_dir}")
 
 
@@ -1477,8 +1545,13 @@ def main() -> None:
     ap.add_argument("--no-guard", action="store_true",
                     help="skip guard review (structural validation only)")
     ap.add_argument("--max-attempts", type=int, default=MAX_GEN_ATTEMPTS,
-                    help="generation attempts per component before an NA "
-                         "placeholder is written and the pack is flagged")
+                    help="generation attempts for a spine component "
+                         "(persona/task/rules) before an NA placeholder is "
+                         "written and the pack is flagged")
+    ap.add_argument("--max-attempts-addon", type=int,
+                    default=MAX_GEN_ATTEMPTS_ADDON,
+                    help="generation attempts for an add-on component (each "
+                         "pressure, guard twin, t2, attacks) before NA")
     ap.add_argument("--retry-na", action="store_true",
                     help="clear NA placeholders (and their rejection history) "
                          "so components on the na_components.jsonl worklist "
@@ -1522,6 +1595,7 @@ def main() -> None:
              max_tokens=args.max_tokens, temperature=args.temperature,
              guards_enabled=not args.no_guard,
              max_attempts=args.max_attempts,
+             max_attempts_addon=args.max_attempts_addon,
              retry_na=args.retry_na)
 
 

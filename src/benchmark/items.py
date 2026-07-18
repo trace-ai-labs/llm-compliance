@@ -30,7 +30,8 @@ import json
 import os
 from typing import Dict, List, Optional
 
-from src.benchmark.generate import SAMPLES_DIR, load_packs, validate_pack
+from src.benchmark.generate import (ALL_COMPONENTS, SAMPLES_DIR, load_packs,
+                                    validate_pack)
 from src.benchmark.registry import (ATTACK_PRESSURE, BENCH_VERSION, CANARY,
                                     SCENARIO_BY_ID, SCENARIOS,
                                     SCORED_PRESSURES, ScenarioSeed)
@@ -66,10 +67,21 @@ def _gen_tag(pack: dict) -> str:
     return str(pack.get("generator_model", "unknown")).split("/")[-1]
 
 
+def _pack_completeness(pack: dict) -> tuple:
+    """(complete, total) components for this pack. A partial pack (an add-on the
+    generator never got past the guard) ships with fewer than `total`, and this
+    tag rides on every item so downstream can weight or filter by it."""
+    total = pack.get("_components_total") or len(ALL_COMPONENTS)
+    na = pack.get("_na_components") or []
+    complete = pack.get("_components_complete", total - len(na))
+    return complete, total
+
+
 def _mk_item(seed: ScenarioSeed, pack: dict, group: str,
              pressure: str, t1_template: str, options: List[dict], binds: bool,
              extra_user: str = "",
-             t2_override: Optional[str] = None) -> dict:
+             t2_override: Optional[str] = None,
+             multiturn_ok: bool = True) -> dict:
     item_id = f"{seed.id}.{_gen_tag(pack)}.{group}.{pressure}"
     opt_text, opt_list = _render_options(options)
 
@@ -79,12 +91,16 @@ def _mk_item(seed: ScenarioSeed, pack: dict, group: str,
         turn1 += pack["pressures"][pressure]
     turn1 += extra_user
 
-    multiturn = group in MULTITURN_GROUPS
+    # multiturn cells need the pack's T2 scripts; if that component is NA
+    # (multiturn_ok False) the cell degrades to single-turn rather than
+    # dropping the whole pressure/neutral measurement
+    multiturn = group in MULTITURN_GROUPS and multiturn_ok
     t2_pushback = t2_challenge = None
     if multiturn:
         t2_pushback = t2_override if t2_override is not None else pack["t2_pushback"]
         t2_challenge = t2_override if t2_override is not None else pack["t2_challenge"]
 
+    complete, total = _pack_completeness(pack)
     return {
         "item_id": item_id,
         "scenario_id": seed.id,
@@ -104,40 +120,66 @@ def _mk_item(seed: ScenarioSeed, pack: dict, group: str,
         "split": _split_for(item_id),
         "generator_model": pack.get("generator_model", "unknown"),
         "hard_directive": pack["hard_directive"],
+        "pack_completeness": f"{complete}/{total}",
+        "pack_components_complete": complete,
+        "pack_components_total": total,
         "canary": CANARY,
         "version": BENCH_VERSION,
     }
 
 
 def render_scenario(seed: ScenarioSeed, pack: dict) -> List[dict]:
-    """The full 13-cell battery — identical for every scenario."""
+    """The full 13-cell battery for a complete pack. A partial pack (spec: NA
+    add-ons) renders every cell whose backing component survived guard review
+    and skips the rest, so a couple of failed pressures cost only their own
+    cells, never the whole pack. Cell -> component:
+      pressure.X          -> pressure.X
+      guard_nonbinding    -> guard_nonbinding
+      attack_binding      -> attacks
+      attack_nonbinding   -> attacks AND guard_nonbinding (reuses the twin)
+      neutral + pressure  -> multiturn T2 needs t2 (degrade to single-turn if NA)
+    """
+    na = set(pack.get("_na_components") or [])
+    t2_ok = "t2" not in na
     items: List[dict] = []
     t1, opts = pack["t1_request"], pack["options"]
 
     items.append(_mk_item(seed, pack, "neutral", "none",
-                          t1, opts, binds=True))
+                          t1, opts, binds=True, multiturn_ok=t2_ok))
     for pressure in SCORED_PRESSURES:
+        if f"pressure.{pressure}" in na:
+            continue
         items.append(_mk_item(seed, pack, "pressure",
-                              pressure, t1, opts, binds=True))
-    gnb = pack["guard_nonbinding"]
-    items.append(_mk_item(seed, pack, "guard_nonbinding",
-                          "none", gnb["t1_request"], gnb["options"], binds=False))
-    items.append(_mk_item(seed, pack, "attack_binding",
-                          ATTACK_PRESSURE, t1, opts, binds=True,
-                          extra_user=pack["attack_binding"]))
-    items.append(_mk_item(seed, pack, "attack_nonbinding",
-                          ATTACK_PRESSURE, gnb["t1_request"], gnb["options"],
-                          binds=False, extra_user=pack["attack_nonbinding"]))
+                              pressure, t1, opts, binds=True, multiturn_ok=t2_ok))
+    gnb_ok = "guard_nonbinding" not in na
+    if gnb_ok:
+        gnb = pack["guard_nonbinding"]
+        items.append(_mk_item(seed, pack, "guard_nonbinding",
+                              "none", gnb["t1_request"], gnb["options"],
+                              binds=False))
+    if "attacks" not in na:
+        items.append(_mk_item(seed, pack, "attack_binding",
+                              ATTACK_PRESSURE, t1, opts, binds=True,
+                              extra_user=pack["attack_binding"]))
+        if gnb_ok:
+            gnb = pack["guard_nonbinding"]
+            items.append(_mk_item(seed, pack, "attack_nonbinding",
+                                  ATTACK_PRESSURE, gnb["t1_request"],
+                                  gnb["options"], binds=False,
+                                  extra_user=pack["attack_nonbinding"]))
     return items
 
 
 def render_all(samples_dir: str = SAMPLES_DIR,
                allow_partial: bool = False) -> List[dict]:
-    """Render every valid (scenario, generator) pack found in samples_dir.
-    Strict by default: any invalid pack, or a scenario with no valid pack at
-    all, blocks the render unless --allow-partial (pilot runs)."""
+    """Render every usable (scenario, generator) pack found in samples_dir.
+    A partial pack (some add-ons NA) is usable and ships its surviving cells,
+    tagged with (x/n) completeness. Only an UNusable pack blocks the render -
+    spine NA (persona/task/rules), a structural defect, or a scenario left with
+    no pack at all - and that block is lifted by --allow-partial (pilot runs)."""
     problems: List[str] = []
     valid: List[tuple] = []
+    partial: List[str] = []
     seen_sids: set = set()
     for pack in load_packs(samples_dir):
         sid = pack.get("scenario_id", "?")
@@ -152,14 +194,21 @@ def render_all(samples_dir: str = SAMPLES_DIR,
             continue
         seen_sids.add(sid)
         valid.append((seed, pack))
+        c, n = _pack_completeness(pack)
+        if c < n:
+            partial.append(f"{sid} [{gen}]: {c}/{n} "
+                           f"(NA: {pack.get('_na_components')})")
     no_pack = sorted(s.id for s in SCENARIOS if s.id not in seen_sids)
     if no_pack:
-        problems.append(f"{len(no_pack)} scenario(s) with no valid pack: "
+        problems.append(f"{len(no_pack)} scenario(s) with no usable pack: "
                         f"{no_pack[:6]}…")
     if problems and not allow_partial:
         raise SystemExit(
             "item render blocked (run src.benchmark.generate, or pass "
             "--allow-partial for pilot runs):\n  " + "\n  ".join(problems[:12]))
+    if partial:
+        print(f"[items] {len(partial)} partial pack(s) shipped with missing "
+              f"cells:\n  " + "\n  ".join(partial[:20]))
     items: List[dict] = []
     for seed, pack in valid:
         items.extend(render_scenario(seed, pack))
@@ -196,7 +245,12 @@ def write_preview(items: List[dict], path: str) -> None:
     ]
     for sid, gen in sorted(by_pack):
         its = by_pack[(sid, gen)]
-        out += ["", "---", "", f"## {sid} — generated by `{gen}`"]
+        comp = its[0].get("pack_completeness", "?")
+        tag = f" — {comp} components" + (
+            " (PARTIAL)" if comp != f"{its[0].get('pack_components_total')}/"
+            f"{its[0].get('pack_components_total')}" else "")
+        out += ["", "---", "",
+                f"## {sid} — generated by `{gen}`{tag} — {len(its)} cell(s)"]
 
         def cell_name(it: dict) -> str:
             return f"{it['group']}.{it['pressure']}"
