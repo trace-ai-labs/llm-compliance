@@ -58,8 +58,18 @@ import argparse
 import json
 import os
 import re
+import sys
 from collections import Counter
 from typing import Callable, Dict, List, Optional, Tuple
+
+# Guard feedback is model-generated and can contain characters outside the
+# console's legacy code page (cp1252 on Windows), which would otherwise crash a
+# progress print() mid-run. Degrade unencodable chars instead of dying.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError):
+        pass
 
 from src.benchmark.batch import BatchRequest, resolve_model, run_batch
 from src.benchmark.gen_prompts import (build_attacks_messages,
