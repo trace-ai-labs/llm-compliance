@@ -68,7 +68,8 @@ from src.benchmark.gen_prompts import (build_attacks_messages,
                                        build_persona_messages,
                                        build_pressure_messages,
                                        build_rules_messages,
-                                       build_t2_messages, build_task_messages)
+                                       build_t2_messages, build_task_messages,
+                                       build_task_coherence_review_messages)
 from src.benchmark.registry import (SCENARIOS, SCENARIO_BY_ID,
                                     SCORED_PRESSURES, ScenarioSeed)
 
@@ -874,50 +875,96 @@ def generate(models: List[str], only: Optional[List[str]] = None, workers: int =
                     plan.append((idx, gm))
             print(f"round {round_no}: dual-guard review of {len(candidates)} "
                   f"candidates ({len(greqs)} reviews)")
+
             # collect verdicts; a guard whose call fails or returns
             # unparseable output is retried individually up to
             # MAX_CALL_RETRIES before the pipeline is flagged
-            verdicts: Dict[int, List[Tuple[str, str, str]]] = {}
-            pending = list(zip(plan, greqs))
-            for verdict_try in range(MAX_CALL_RETRIES):
-                if not pending:
-                    break
-                batch = [greq if verdict_try == 0 else BatchRequest(
-                            id=f"{greq.id}.r{verdict_try}", model=greq.model,
-                            temperature=greq.temperature,
-                            max_tokens=greq.max_tokens,
-                            messages=greq.messages, meta=greq.meta)
-                         for _, greq in pending]
-                gresults = run_batch(batch, raw_path, max_workers=workers)
-                still: List[Tuple[Tuple[int, str], BatchRequest]] = []
-                for ((idx, gm), greq), breq in zip(pending, batch):
-                    grow = gresults.get(breq.id)
-                    parsed = extract_json(grow["content"]) if grow else None
-                    if parsed is None:
-                        still.append(((idx, gm), greq))
-                        continue
-                    v = ("PASS" if str(parsed.get("verdict", "")).strip()
-                         .upper().startswith("PASS") else "FAIL")
-                    verdicts.setdefault(idx, []).append(
-                        (gm, v, str(parsed.get("feedback", "")).strip()))
-                pending = still
-                if pending and verdict_try < MAX_CALL_RETRIES - 1:
-                    print(f"  {len(pending)} guard verdict(s) unavailable, "
-                          f"retrying ({verdict_try + 1}/{MAX_CALL_RETRIES})")
-            for (idx, gm), _ in pending:   # exhausted: pipeline problem
-                sid, gen_model, component, attempt, obj = candidates[idx]
-                verdicts.setdefault(idx, []).append((gm, "ERROR", ""))
-                broken.add((sid, gen_model, component))
-                pipeline_flag(sid, component, "guard", gm,
-                              f"no usable verdict after {MAX_CALL_RETRIES} "
-                              f"attempts", flags)
+            def _run_review_batch(rplan: List[Tuple[int, str]],
+                                  rreqs: List[BatchRequest]
+                                  ) -> Dict[int, List[Tuple[str, str, str]]]:
+                vd: Dict[int, List[Tuple[str, str, str]]] = {}
+                pend = list(zip(rplan, rreqs))
+                for vtry in range(MAX_CALL_RETRIES):
+                    if not pend:
+                        break
+                    batch = [greq if vtry == 0 else BatchRequest(
+                                id=f"{greq.id}.r{vtry}", model=greq.model,
+                                temperature=greq.temperature,
+                                max_tokens=greq.max_tokens,
+                                messages=greq.messages, meta=greq.meta)
+                             for _, greq in pend]
+                    gresults = run_batch(batch, raw_path, max_workers=workers)
+                    still: List[Tuple[Tuple[int, str], BatchRequest]] = []
+                    for ((idx, gm), greq), breq in zip(pend, batch):
+                        grow = gresults.get(breq.id)
+                        parsed = extract_json(grow["content"]) if grow else None
+                        if parsed is None:
+                            still.append(((idx, gm), greq))
+                            continue
+                        v = ("PASS" if str(parsed.get("verdict", "")).strip()
+                             .upper().startswith("PASS") else "FAIL")
+                        vd.setdefault(idx, []).append(
+                            (gm, v, str(parsed.get("feedback", "")).strip()))
+                    pend = still
+                    if pend and vtry < MAX_CALL_RETRIES - 1:
+                        print(f"  {len(pend)} guard verdict(s) unavailable, "
+                              f"retrying ({vtry + 1}/{MAX_CALL_RETRIES})")
+                for (idx, gm), _ in pend:   # exhausted: pipeline problem
+                    sid, gen_model, component, attempt, obj = candidates[idx]
+                    vd.setdefault(idx, []).append((gm, "ERROR", ""))
+                    broken.add((sid, gen_model, component))
+                    pipeline_flag(sid, component, "guard", gm,
+                                  f"no usable verdict after {MAX_CALL_RETRIES} "
+                                  f"attempts", flags)
+                return vd
+
+            verdicts = _run_review_batch(plan, greqs)
+
+            # 4b. TASK LABEL-COHERENCE (sighted second pass). The blind review
+            # above cannot see the gold labels, so a separate reviewer certifies
+            # the answer key. Only guards that PASSED the blind review audit the
+            # labels (a menu already rejected needs no answer key), and a guard's
+            # task verdict becomes PASS only if the labels also check out: a
+            # coherence FAIL flips that guard to FAIL with the label feedback.
+            coh_plan: List[Tuple[int, str]] = []
+            coh_reqs: List[BatchRequest] = []
+            for idx, (sid, gen_model, component, attempt, obj) in enumerate(candidates):
+                if component != "task":
+                    continue
+                for gm, v, _fb in verdicts.get(idx, []):
+                    if v == "PASS":
+                        coh_reqs.append(BatchRequest(
+                            id=f"cohguard.{sid}.{safe(gen_model)}.task"
+                               f".a{attempt}.{safe(gm)}",
+                            model=gm, temperature=0.0, max_tokens=4000,
+                            messages=build_task_coherence_review_messages(
+                                SCENARIO_BY_ID[sid], obj),
+                            meta={"scenario_id": sid, "component": "task",
+                                  "generator_model": gen_model, "guard": gm}))
+                        coh_plan.append((idx, gm))
+            if coh_reqs:
+                print(f"round {round_no}: task label-coherence audit "
+                      f"({len(coh_reqs)} sighted reviews)")
+                coh_verdicts = _run_review_batch(coh_plan, coh_reqs)
+                for idx, clist in coh_verdicts.items():
+                    coh_map = {gm: (v, fb) for gm, v, fb in clist}
+                    verdicts[idx] = [
+                        (gm, "FAIL", "label coherence: " + coh_map[gm][1])
+                        if gm in coh_map and v == "PASS"
+                        and coh_map[gm][0] == "FAIL"
+                        else (gm, "ERROR", "")
+                        if gm in coh_map and v == "PASS"
+                        and coh_map[gm][0] == "ERROR"
+                        else (gm, v, fb)
+                        for gm, v, fb in verdicts[idx]]
 
             for idx, (sid, gen_model, component, attempt, obj) in enumerate(candidates):
                 vs = verdicts.get(idx, [])
                 fails = [(gm, fb) for gm, v, fb in vs if v == "FAIL"]
                 errors = [gm for gm, v, _ in vs if v == "ERROR"]
-                # EITHER guard's FAIL rejects and burns one of the 5 attempts;
-                # all failing guards' feedback goes back to the generator
+                # EITHER guard's FAIL (blind review OR label-coherence audit)
+                # rejects and burns one attempt; all failing guards' feedback
+                # goes back to the generator
                 accepted = bool(vs) and not fails and not errors
 
                 # log every review with its co-guard's verdict alongside
