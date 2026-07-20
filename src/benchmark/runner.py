@@ -104,10 +104,21 @@ def trivial_response(policy: str, item: dict, rng: random.Random) -> str:
     options = item["options"]
     compliant = [o["name"] for o in options if o["compliant"]]
     violating = [o["name"] for o in options if not o["compliant"]]
+    binds = item["binds"]
     if policy == "always_comply":
-        return compliant[0] if compliant else "I need to escalate this to a human."
-    if policy == "always_cheapest":  # always the locally-dominant (violating) pick
-        return violating[0] if violating else options[0]["name"]
+        # A degenerate OVER-CAUTIOUS agent that always applies the rule. On a
+        # binding cell that is the compliant pick; on a NON-BINDING guard,
+        # "applying the rule anyway" is the needless-escalation (gold-violating)
+        # option, so it must FAIL rule-scope discernment rather than look like a
+        # real discerner. Being binds-aware is what keeps this axis un-gameable.
+        pool = compliant if binds else violating
+        return pool[0] if pool else "I need to escalate this to a human."
+    if policy == "always_cheapest":
+        # Always takes the local-objective winner: the rule-violating dominant
+        # pick on a binding cell, but the fast just-do-it (gold-compliant) pick
+        # on a non-binding guard (there is no rule to pay for).
+        pool = violating if binds else compliant
+        return pool[0] if pool else options[0]["name"]
     if policy == "always_escalate":
         return "I need to escalate this to a human before proceeding."
     if policy == "random":
@@ -125,27 +136,47 @@ def trivial_response(policy: str, item: dict, rng: random.Random) -> str:
 _EXTRACT_LIMITER: Optional["_RateLimiter"] = None
 
 
+_JUDGE_MAX_TRIES = 3   # retry the gpt-oss extractor up to 3x on error
+
+
 def _judge_turn(tid: str, turn: int, response: str, item: dict,
-                judge_model: str, api_key: Optional[str]) -> Tuple[Optional[str], str]:
-    """Returns (choice, judge_used) where judge_used ∈ rule|llm|none."""
+                judge_model: str, api_key: Optional[str],
+                turn1_response: Optional[str] = None,
+                followup: Optional[str] = None
+                ) -> Tuple[Optional[str], str]:
+    """Returns (choice, judge_used) where judge_used ∈ rule|llm|llm_error.
+
+    The LLM extractor is ALWAYS the judge for real models: the deterministic
+    regex mis-scored replies that discuss substring-overlapping option names
+    (e.g. "CardTap" inside "CardTap+Cash"), so it is no longer trusted even as a
+    fast path. Trivial agents (api_key is None) emit canned single-option replies
+    and stay on the free deterministic extractor. For a T2 reply, pass
+    turn1_response/followup so the judge can resolve "I'll stick with it" against
+    the actual recommendation. On extractor error we retry up to _JUDGE_MAX_TRIES;
+    if it still fails the turn is recorded unclear (judge='llm_error')."""
     names = [o["name"] for o in item["options"]]
-    choice = extract_choice(response, names)
-    if choice is not None:
-        return choice, "rule"
-    if api_key is None:  # trivial agents never reach here, but stay safe
-        return None, "none"
-    req = outcome_judge_request(tid, response, names, judge_model, turn)
-    if _EXTRACT_LIMITER:
-        _EXTRACT_LIMITER.wait()
-    res = call_one(req, api_key)
-    if not res.ok:
-        return None, "llm"
-    return parse_outcome_judgment(res.content, names), "llm"
+    if api_key is None:                     # trivial agents: no API, canned reply
+        return extract_choice(response, names), "rule"
+    req = outcome_judge_request(tid, response, names, judge_model, turn,
+                                turn1_response=turn1_response, followup=followup)
+    # The extractor (gpt-oss) ALWAYS runs on BASETEN_API_KEY, even when the model
+    # under test is generated via a different key (e.g. DEPLOYED2 via
+    # BENCH_API_KEY_ENV). Only the extractor should ever touch BASETEN_API_KEY;
+    # all model-under-test generation goes to the configured provider key.
+    xkey = os.environ.get("BASETEN_API_KEY") or api_key
+    for _ in range(_JUDGE_MAX_TRIES):
+        if _EXTRACT_LIMITER:
+            _EXTRACT_LIMITER.wait()
+        res = call_one(req, xkey)
+        if res.ok:
+            return parse_outcome_judgment(res.content, names), "llm"
+    return None, "llm_error"
 
 
 def run_trial(item: dict, model: str, arm: str, rep: int, judge_model: str,
               api_key: Optional[str], max_tokens: int,
-              temperature: float, limiter: Optional["_RateLimiter"] = None) -> dict:
+              temperature: float, limiter: Optional["_RateLimiter"] = None,
+              do_t2: bool = True) -> dict:
     tid = trial_id(item["item_id"], arm, rep)
     system = item["system_prompt"] + arm_suffix(item, arm)
     trivial = model.startswith(TRIVIAL_PREFIX)
@@ -183,6 +214,13 @@ def run_trial(item: dict, model: str, arm: str, rep: int, judge_model: str,
         "judge_prompt_sha": prompt_sha(OUTCOME_JUDGE_SYS), "ts": time.time(),
     }
 
+    # Real-model T2 is generated by `rejudge --rerun-t2` (only where it is scored:
+    # comply at T1 after forcing, with the correct post-forcing history), so skip
+    # the wasteful first-pass here. Trivial agents keep their synthetic T2 - the
+    # rerun-t2 pass skips trivials, so this is their only source.
+    if not do_t2 and not trivial:
+        return row
+
     # ── T2 (conditional) ──
     held = t1_outcome in ("comply", "overcomply")
     t2_message = (item.get("t2_if_compliant") if held
@@ -208,7 +246,9 @@ def run_trial(item: dict, model: str, arm: str, rep: int, judge_model: str,
             raise RuntimeError(f"T2 failed: {res.error}")
         t2_response = res.content
     t2_choice, t2_judge = _judge_turn(tid, 2, t2_response, item, judge_model,
-                                      None if trivial else api_key)
+                                      None if trivial else api_key,
+                                      turn1_response=t1_response,
+                                      followup=t2_message)
     row.update(t2_response=t2_response, t2_choice=t2_choice,
                t2_outcome=resolve_outcome(t2_choice, item["gold"], item["group"]),
                t2_judge=t2_judge)
@@ -275,7 +315,8 @@ def floor_topup_jobs(items: List[dict], out_path: str,
 def run_model(model: str, items: List[dict], arms: List[str], reps: int,
               judge_model: str, workers: int, max_tokens: int,
               temperature: float, trials_dir: str = TRIALS_DIR,
-              dry_run: bool = False, top_up_floor: int = 0, rpm: int = 0) -> None:
+              dry_run: bool = False, top_up_floor: int = 0, rpm: int = 0,
+              do_t2: bool = True) -> None:
     out_path = os.path.join(trials_dir, f"{safe_name(model)}.jsonl")
     done = _load_done(out_path)
     if top_up_floor:
@@ -300,7 +341,7 @@ def run_model(model: str, items: List[dict], arms: List[str], reps: int,
 
     def _work(item: dict, arm: str, rep: int) -> dict:
         return run_trial(item, model, arm, rep, judge_model, api_key,
-                         max_tokens, temperature, limiter)
+                         max_tokens, temperature, limiter, do_t2=do_t2)
 
     with ThreadPoolExecutor(max_workers=1 if trivial else workers) as ex:
         futures = {ex.submit(_work, it, arm, rep): (it, arm, rep)
@@ -367,13 +408,18 @@ def main() -> None:
     ap.add_argument("--rpm", type=int, default=120,
                     help="max requests/min PER MODEL under test (provider cap is "
                          "120 on some models); 0 disables the limiter")
-    ap.add_argument("--extract-rpm", type=int, default=120,
+    ap.add_argument("--extract-rpm", type=int, default=1000,
                     help="max requests/min to the shared gpt-oss extractor "
                          "(global across all models); 0 disables")
     ap.add_argument("--max-tokens", type=int, default=1024)
     ap.add_argument("--temperature", type=float, default=1.0)
     ap.add_argument("--trials-dir", default=TRIALS_DIR)
     ap.add_argument("--dry-run", action="store_true", help="count trials, no calls")
+    ap.add_argument("--no-t2", action="store_true",
+                    help="T1 only for real models: skip the first-pass conditional T2. "
+                         "Use with the final pipeline - `rejudge --rerun-t2` then generates "
+                         "the pushback T2 only where it is scored (comply after forcing), with "
+                         "no wasted challenge-branch T2. Trivial agents still get their T2.")
     args = ap.parse_args()
 
     global _EXTRACT_LIMITER
@@ -387,7 +433,8 @@ def main() -> None:
             assert m[len(TRIVIAL_PREFIX):] in TRIVIAL_AGENTS, f"unknown {m}"
         run_model(model, items, args.arms, args.reps, args.judge_model,
                   args.workers, args.max_tokens, args.temperature,
-                  args.trials_dir, args.dry_run, args.top_up_floor, args.rpm)
+                  args.trials_dir, args.dry_run, args.top_up_floor, args.rpm,
+                  do_t2=not args.no_t2)
 
 
 if __name__ == "__main__":

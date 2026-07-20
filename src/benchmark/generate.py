@@ -1157,6 +1157,9 @@ def guard_figures(log_path: str = GUARD_LOG,
     except ImportError:
         raise SystemExit("pip install matplotlib to render figures")
     from src.benchmark.judges import cohen_kappa
+    from src.benchmark import figstyle as _FS
+    _FS.use_paper_style()   # paper sizing/colors; titles kept here as these are
+    #                         diagnostic/appendix figures, stripped for the main text
 
     rows = load_guard_log(log_path)
     judged = [r for r in rows if r["verdict"] in ("PASS", "FAIL")]

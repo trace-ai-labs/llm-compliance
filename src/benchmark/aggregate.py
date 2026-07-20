@@ -17,7 +17,8 @@ import os
 from typing import Dict, List, Optional
 
 from src.benchmark import metrics as M
-from src.benchmark.judges import HONESTY_PATH, load_honesty, load_trials
+from src.benchmark.judges import (HONESTY_PATH, load_honesty,
+                                  load_honesty_votes, load_trials)
 from src.benchmark.registry import DOMAINS
 from src.benchmark.runner import TRIALS_DIR, TRIVIAL_PREFIX
 
@@ -37,7 +38,12 @@ def _fmt(v: Optional[float]) -> str:
 
 
 def profile_all(trials: List[dict], honesty: Dict[str, str],
-                quorum: float) -> Dict[str, Dict]:
+                honesty_votes: Dict, quorum: float, fast: bool = False) -> Dict[str, Dict]:
+    """Per-model six-axis profiles + scalar rollup. `fast=True` skips every
+    bootstrap (pressure-resistance CI, two-stage rollup CI, clustered SE) and
+    returns point estimates only - seconds instead of minutes, for redrawing
+    figures. The full inferential outputs (CIs, contrasts, gates) still require
+    a plain `aggregate` run."""
     cells = M.build_cells(trials)
     models = sorted({t["model"] for t in trials})
     panel = [m for m in models if not m.startswith(TRIVIAL_PREFIX)]
@@ -45,10 +51,10 @@ def profile_all(trials: List[dict], honesty: Dict[str, str],
 
     profiles: Dict[str, Dict] = {}
     for model in models:
-        pr = M.pressure_resistance(cells, model, with_ci=True)
+        pr = M.pressure_resistance(cells, model, with_ci=not fast)
         pb = M.pushback_resistance(cells, model, core)
         st = M.steerability(cells, model)
-        rh = M.reasoning_honesty(trials, honesty, model)
+        rh = M.reasoning_honesty(trials, honesty, honesty_votes, model)
         rd = M.rule_scope_discernment(cells, model)
         axes = {
             "default_compliance": M.default_compliance(cells, model),
@@ -73,8 +79,10 @@ def profile_all(trials: List[dict], honesty: Dict[str, str],
                 harmonic=harmonic,
                 win_rate=M.mean_win_rate(cells, model, panel),
                 abstention=M.abstention_rate(cells, model)),
-            "rollup_ci": M.two_stage_bootstrap(outs, M.cross_fitted_cvar),
-            "default_compliance_se": M.clustered_se(neutral_pairs),
+            "rollup_ci": None if fast else M.two_stage_bootstrap(
+                outs, M.cross_fitted_cvar),
+            "default_compliance_se": None if fast else M.clustered_se(
+                neutral_pairs),
             "detail": {"pressure": pr, "pushback": pb, "steer": st,
                        "honesty": rh, "discernment": rd},
         }
@@ -274,6 +282,172 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
                 f"of {len(meta['panel'])} models\n")
 
 
+FIG_DIR = os.path.join("results", "benchmark", "figures")
+
+
+def load_rollup_ci(csv_path: str) -> Dict[str, tuple]:
+    """Pull each model's rollup-CVaR CI from a prior full metrics_v2.csv so the
+    fast figure path can still draw leaderboard error bars. Missing/parse
+    failures just yield no bar for that model."""
+    ci: Dict[str, tuple] = {}
+    if not os.path.exists(csv_path):
+        return ci
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        for row in csv.DictReader(f):
+            try:
+                ci[row["model"]] = (float(row["rollup_cvar_lo"]),
+                                    float(row["rollup_cvar_hi"]))
+            except (KeyError, ValueError, TypeError):
+                pass
+    return ci
+
+
+def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DIR
+                   ) -> None:
+    """The paper's results figures, all paper-styled (no titles; captions carry
+    them): leaderboard, six-axis heatmap, radar, inter-axis correlation, and the
+    per-domain and per-pressure (fragility) heatmaps. Trivial agents (the
+    gameability floor) stay in the numbered figures (leaderboard, heatmap) and
+    the metrics tables, but are EXCLUDED from the radar/hexagon (real-model
+    panel only)."""
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from collections import defaultdict
+    from src.benchmark import figstyle as FS
+    from src.benchmark.registry import SCORED_PRESSURES
+    FS.use_paper_style()
+    os.makedirs(out_dir, exist_ok=True)
+    models = [m for m in profiles if m != "_meta"]
+    if not models:
+        return
+    triv = lambda m: m.startswith(TRIVIAL_PREFIX)
+    cvar = lambda m: profiles[m]["rollup"].cross_fit_cvar or 0.0
+    panel = sorted([m for m in models if not triv(m)], key=cvar, reverse=True)
+
+    def save(fig, name):
+        fig.savefig(os.path.join(out_dir, name)); plt.close(fig)
+
+    # 1. leaderboard: scalar rollup (cross-fitted CVaR) with bootstrap CI
+    order = sorted(models, key=cvar)
+    fig, ax = plt.subplots(figsize=(9, 0.55 * len(order) + 1.2))
+    for i, m in enumerate(order):
+        v = cvar(m); ci = profiles[m].get("rollup_ci")
+        ax.barh(i, v, color=(FS.MUTED if triv(m) else FS.model_color(m)),
+                height=0.66)
+        if ci and ci[0] is not None:
+            ax.plot([ci[0], ci[1]], [i, i], color=FS.INK, lw=1.3)
+        ax.text(v + 0.012, i, f"{v:.2f}", va="center", fontsize=13, color=FS.INK)
+    ax.set_yticks(range(len(order)))
+    ax.set_yticklabels([FS.short(m) for m in order])
+    ax.set_xlim(0, 1.1)
+    ax.set_xlabel("Scalar rollup (cross-fitted CVaR, worst-quartile floor)")
+    FS.strip_axes(ax)
+    fig.tight_layout(); save(fig, "leaderboard.png")
+
+    # 2. six-axis profile heatmap (models × axes), best on top
+    order2 = sorted(models, key=cvar, reverse=True)
+    mat = np.array([[profiles[m]["axes"][a] if profiles[m]["axes"][a] is not None
+                     else np.nan for a in AXES] for m in order2])
+    fig, ax = plt.subplots(figsize=(1.25 * len(AXES) + 3, 0.55 * len(order2) + 1.8))
+    im = ax.imshow(mat, cmap=FS.SCORE_CMAP, vmin=0, vmax=1, aspect="auto")
+    ax.set_xticks(range(len(AXES)))
+    ax.set_xticklabels([FS.AXIS_LABEL[a] for a in AXES])
+    ax.set_yticks(range(len(order2)))
+    ax.set_yticklabels([FS.short(m) for m in order2])
+    for i in range(len(order2)):
+        for j in range(len(AXES)):
+            if not np.isnan(mat[i, j]):
+                ax.text(j, i, f"{mat[i, j]:.2f}", ha="center", va="center",
+                        fontsize=12, color=FS.INK)
+    fig.colorbar(im, ax=ax, shrink=0.7, label="score (higher better)")
+    fig.tight_layout(); save(fig, "axes_heatmap.png")
+
+    # 3. radar / hexagon: all six axes at once (the profile IS the result)
+    N = len(AXES)
+    ang = [n / N * 2 * np.pi for n in range(N)] + [0.0]
+    # radar/hexagon: real-model panel only - trivial oracles excluded here
+    # (they remain in the leaderboard, heatmap, and metrics tables).
+    radar_models = panel[:6]
+    if radar_models:
+        fig = plt.figure(figsize=(7.5, 7.5))
+        ax = fig.add_subplot(111, polar=True)
+        for m in radar_models:
+            vals = [(profiles[m]["axes"][a] if profiles[m]["axes"][a] is not None
+                     else 0.0) for a in AXES]
+            vals += vals[:1]
+            col = FS.RED if triv(m) else FS.model_color(m)
+            ax.plot(ang, vals, "--" if triv(m) else "-", color=col, lw=2.2,
+                    label=FS.short(m))
+            ax.fill(ang, vals, color=col, alpha=0.08)
+        ax.set_xticks(ang[:-1])
+        ax.set_xticklabels([FS.AXIS_LABEL[a].replace("\n", " ") for a in AXES],
+                           fontsize=13)
+        ax.set_ylim(0, 1); ax.set_yticks([0.25, 0.5, 0.75, 1.0])
+        ax.set_yticklabels([".25", ".5", ".75", "1"], fontsize=11, color=FS.MUTED)
+        ax.legend(loc="upper right", bbox_to_anchor=(1.32, 1.12), frameon=False)
+        save(fig, "radar.png")
+
+    # 4. inter-axis correlation across the real-model panel
+    if len(panel) >= 3:
+        P = np.array([[profiles[m]["axes"][a] for a in AXES] for m in panel],
+                     dtype=float)
+        keep = [j for j in range(len(AXES)) if not np.isnan(P[:, j]).any()]
+        if len(keep) >= 2:
+            C = np.corrcoef(P[:, keep], rowvar=False)
+            labs = [FS.AXIS_LABEL[AXES[j]] for j in keep]
+            fig, ax = plt.subplots(figsize=(1.15 * len(keep) + 2.5,
+                                            1.15 * len(keep) + 2.5))
+            im = ax.imshow(C, cmap=FS.CORR_CMAP, vmin=-1, vmax=1)
+            ax.set_xticks(range(len(keep))); ax.set_xticklabels(labs)
+            ax.set_yticks(range(len(keep))); ax.set_yticklabels(labs)
+            for i in range(len(keep)):
+                for j in range(len(keep)):
+                    ax.text(j, i, f"{C[i, j]:.2f}", ha="center", va="center",
+                            fontsize=12)
+            fig.colorbar(im, ax=ax, shrink=0.7, label="Pearson r")
+            fig.tight_layout(); save(fig, "axis_correlation.png")
+
+    # 5 & 6. per-domain and per-pressure (fragility) base-arm compliance, panel
+    dom_r: Dict = defaultdict(list)
+    pre_r: Dict = defaultdict(list)
+    for (m, arm, _), c in cells.items():
+        if arm != "base" or c.rate is None or triv(m):
+            continue
+        dom_r[(m, c.domain)].append(c.rate)
+        if c.group == "pressure":
+            pre_r[(m, c.pressure)].append(c.rate)
+
+    def heat(rowmodels, cols, collabels, cellmap, fname, xlab):
+        mat = np.array([[np.mean(cellmap[(m, c)]) if cellmap.get((m, c)) else np.nan
+                         for c in cols] for m in rowmodels])
+        fig, ax = plt.subplots(figsize=(0.62 * len(cols) + 3,
+                                        0.55 * len(rowmodels) + 1.8))
+        im = ax.imshow(mat, cmap=FS.SCORE_CMAP, vmin=0, vmax=1, aspect="auto")
+        ax.set_xticks(range(len(cols)))
+        ax.set_xticklabels(collabels, rotation=40, ha="right")
+        ax.set_yticks(range(len(rowmodels)))
+        ax.set_yticklabels([FS.short(m) for m in rowmodels])
+        for i in range(len(rowmodels)):
+            for j in range(len(cols)):
+                if not np.isnan(mat[i, j]):
+                    ax.text(j, i, f"{mat[i, j]:.2f}", ha="center", va="center",
+                            fontsize=10, color=FS.INK)
+        ax.set_xlabel(xlab)
+        fig.colorbar(im, ax=ax, shrink=0.7, label="T1 compliance (base arm)")
+        fig.tight_layout(); save(fig, fname)
+
+    if panel:
+        doms = [d.key for d in DOMAINS]
+        heat(panel, doms, [d.replace("_", " ") for d in doms], dom_r,
+             "per_domain.png", "Domain")
+        heat(panel, list(SCORED_PRESSURES),
+             [p.replace("_", " ") for p in SCORED_PRESSURES], pre_r,
+             "per_pressure.png", "Pressure family (fragility)")
+    print(f"metric figures -> {out_dir}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--trials-dir", default=TRIALS_DIR)
@@ -284,6 +458,12 @@ def main() -> None:
     ap.add_argument("--md", default=OUT_MD)
     ap.add_argument("--cells-csv", default=OUT_CELLS)
     ap.add_argument("--contrasts-csv", default=OUT_CONTRASTS)
+    ap.add_argument("--figures", action="store_true",
+                    help="also write leaderboard + six-axis + correlation PNGs")
+    ap.add_argument("--figures-only", action="store_true",
+                    help="ONLY (re)draw figures from point estimates - skips all "
+                    "bootstraps/contrasts (seconds, not minutes). Leaderboard CI "
+                    "bars are read from an existing metrics_v2.csv if present.")
     args = ap.parse_args()
 
     trials = load_trials(args.trials_dir)
@@ -291,8 +471,27 @@ def main() -> None:
         raise SystemExit(f"no trials found in {args.trials_dir} — run "
                          "src.benchmark.runner first")
     honesty = load_honesty(args.honesty)
+    honesty_votes = load_honesty_votes(args.honesty)
     print(f"{len(trials)} trials, {len(honesty)} honesty labels")
-    profiles = profile_all(trials, honesty, args.quorum)
+
+    if args.figures_only:
+        import time as _t
+        t0 = _t.time()
+        profiles = profile_all(trials, honesty, honesty_votes, args.quorum, fast=True)
+        ci = load_rollup_ci(args.csv)
+        for m, c in ci.items():
+            if m in profiles:
+                profiles[m]["rollup_ci"] = c
+        cells = M.build_cells(trials)
+        metric_figures(profiles, cells)
+        n_real = len([m for m in profiles if m != "_meta"
+                      and not m.startswith(TRIVIAL_PREFIX)])
+        print(f"figures-only: {n_real} real models, drew {FIG_DIR}/*.png in "
+              f"{_t.time() - t0:.1f}s"
+              + ("" if ci else "  (no CI bars - run full `aggregate` for those)"))
+        return
+
+    profiles = profile_all(trials, honesty, honesty_votes, args.quorum)
 
     cells = M.build_cells(trials)
     panel = profiles["_meta"]["panel"]
@@ -318,6 +517,8 @@ def main() -> None:
                   args.contrasts_csv)
     print(f"\nwrote {args.csv}, {args.md}, {args.cells_csv}, "
           f"{args.contrasts_csv}")
+    if args.figures:
+        metric_figures(profiles, cells)
 
 
 if __name__ == "__main__":
