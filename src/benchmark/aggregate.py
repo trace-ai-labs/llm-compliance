@@ -201,10 +201,11 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
             p = profiles[m]
             d = p["detail"]
             r = p["rollup"]
-            ci = p.get("rollup_ci", (None, None))
+            ci = p.get("rollup_ci") or (None, None)      # None in --fast mode
+            pci = d["pressure"].ci or (None, None)        # None when with_ci=False
             w.writerow([m] + [p["axes"][a] for a in AXES] + [
                 p.get("default_compliance_se"),
-                d["pressure"].ci[0], d["pressure"].ci[1],
+                pci[0], pci[1],
                 r.cross_fit_cvar, ci[0], ci[1],
                 r.plain_mean, r.harmonic, r.win_rate,
                 r.abstention, d["pressure"].naive_cvar,
@@ -233,7 +234,7 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
         for m in models:
             p = profiles[m]
             r = p["rollup"]
-            lo, hi = p.get("rollup_ci", (None, None))
+            lo, hi = p.get("rollup_ci") or (None, None)
             ci_txt = (f" [{_fmt(lo)}, {_fmt(hi)}]"
                       if lo is not None and hi is not None else "")
             f.write(f"| {m} | "
@@ -464,6 +465,12 @@ def main() -> None:
                     help="ONLY (re)draw figures from point estimates - skips all "
                     "bootstraps/contrasts (seconds, not minutes). Leaderboard CI "
                     "bars are read from an existing metrics_v2.csv if present.")
+    ap.add_argument("--fast", action="store_true",
+                    help="skip ALL bootstraps (per-axis CIs, rollup CI, clustered "
+                    "SE) and the paired contrasts - point estimates only. Writes "
+                    "metrics_v2/cells (rollup + six axes) in ~1-2 min instead of "
+                    "~15; contrasts_v2 is left header-only. Run a full `aggregate` "
+                    "later to backfill CIs + contrasts.")
     args = ap.parse_args()
 
     trials = load_trials(args.trials_dir)
@@ -491,11 +498,12 @@ def main() -> None:
               + ("" if ci else "  (no CI bars - run full `aggregate` for those)"))
         return
 
-    profiles = profile_all(trials, honesty, honesty_votes, args.quorum)
+    profiles = profile_all(trials, honesty, honesty_votes, args.quorum,
+                           fast=args.fast)
 
     cells = M.build_cells(trials)
     panel = profiles["_meta"]["panel"]
-    contrasts = M.model_contrasts(cells, panel)
+    contrasts = {} if args.fast else M.model_contrasts(cells, panel)
     promo = promotion_gate(cells, panel, len(honesty))
     power = power_gate(cells, panel)
     write_cells_csv(cells, args.cells_csv)

@@ -75,6 +75,16 @@ MODEL_REGISTRY: Dict[str, str] = {
     "seed-oss": "Seed-OSS-36B-Instruct",
     "qwen36":   "Qwen3.6 27B",
     "qwen3.6":  "Qwen3.6 27B",
+    # External-provider models (see EXTERNAL below): Anthropic / OpenAI / OpenRouter.
+    "haiku":        "claude-haiku-4-5",
+    "claude-haiku": "claude-haiku-4-5",
+    "luna":         "gpt-5.6-luna",
+    "gpt-luna":     "gpt-5.6-luna",
+    "grok":         "x-ai/grok-4.3",
+    "grok4.3":      "x-ai/grok-4.3",
+    "gemini":       "google/gemini-3-flash-preview",
+    "gemini-flash": "google/gemini-3-flash-preview",
+    "gemini3":      "google/gemini-3-flash-preview",
 }
 
 # Baseten DEDICATED deployments (a different product from the shared Model APIs
@@ -94,6 +104,76 @@ DEDICATED: Dict[str, str] = {
     "Qwen3.6 27B":            "qklxd483",
 }
 _dedicated_names: Dict[str, str] = {}   # model_id -> served vLLM model name (cached)
+
+
+# ── External providers (Anthropic / OpenAI / OpenRouter) ─────────────────────
+# A third routing path beside the shared Baseten endpoint and DEDICATED Baseten
+# deployments: models hosted OFF Baseten, each with its own base_url, API key,
+# and request quirks (reasoning controls, max_completion_tokens, temperature
+# rules). Mirrors DEDICATED - call_one intercepts `req.model in EXTERNAL` and
+# routes to the model's own provider, IGNORING the caller's api_key, so nothing
+# downstream (runner / rejudge) needs to know the provider. The gpt-oss outcome
+# extractor is NOT in EXTERNAL, so it always stays on the Baseten shared endpoint
+# (BASETEN_API_KEY) exactly as before.
+@dataclass
+class ProviderSpec:
+    base_url: str
+    key_envs: tuple                        # tried in order; first one SET wins
+    served_model: str                      # slug sent as the "model" field
+    extra_body: Dict[str, Any] = field(default_factory=dict)
+    use_max_completion_tokens: bool = False    # OpenAI reasoning models reject max_tokens
+    send_temperature: bool = True              # False = omit it (OpenAI reasoning: default-only)
+    temperature_override: Optional[float] = None
+    default_headers: Dict[str, str] = field(default_factory=dict)
+    timeout: float = 300.0
+
+
+EXTERNAL: Dict[str, "ProviderSpec"] = {
+    # Claude Haiku 4.5 via Anthropic's OpenAI-compatible endpoint (Bearer auth via
+    # the SDK). No extended thinking by default -> plain instruct behaviour. BOTH
+    # keys in .env authenticate (verified); per the user's choice ANTHROPIC_API_KEY2
+    # is primary and ANTHROPIC_API_KEY is the automatic fallback if ...2 is unset.
+    "claude-haiku-4-5": ProviderSpec(
+        base_url="https://api.anthropic.com/v1/",
+        key_envs=("ANTHROPIC_API_KEY2", "ANTHROPIC_API_KEY"),
+        served_model="claude-haiku-4-5-20251001"),
+    # GPT-5.6 Luna via OpenAI. Reasoning model: requires max_completion_tokens (not
+    # max_tokens) and only the DEFAULT temperature (so we OMIT temperature). Give a
+    # generous cap so hidden reasoning does not starve the visible answer.
+    "gpt-5.6-luna": ProviderSpec(
+        base_url="https://api.openai.com/v1",
+        key_envs=("OPENAI_API_KEY",),
+        served_model="gpt-5.6-luna",
+        use_max_completion_tokens=True,
+        send_temperature=False),
+    # Grok 4.3 via OpenRouter at NONE reasoning. `reasoning.enabled=false` is the
+    # documented OpenRouter off-switch, verified to yield 0 reasoning tokens.
+    # (reasoning.exclude=true does NOT work: it still SPENDS reasoning, just hides
+    # the trace. effort="none" also zeroes it but enabled:false is canonical.)
+    "x-ai/grok-4.3": ProviderSpec(
+        base_url="https://openrouter.ai/api/v1",
+        key_envs=("OPENROUTER_API_KEY",),
+        served_model="x-ai/grok-4.3",
+        extra_body={"reasoning": {"enabled": False}},
+        default_headers={"HTTP-Referer": "https://github.com/pact-benchmark",
+                         "X-Title": "PACT benchmark"}),
+    # Gemini 3 Flash Preview via OpenRouter (default thinking).
+    "google/gemini-3-flash-preview": ProviderSpec(
+        base_url="https://openrouter.ai/api/v1",
+        key_envs=("OPENROUTER_API_KEY",),
+        served_model="google/gemini-3-flash-preview",
+        default_headers={"HTTP-Referer": "https://github.com/pact-benchmark",
+                         "X-Title": "PACT benchmark"}),
+}
+
+
+def _resolve_provider_key(spec: "ProviderSpec") -> Optional[str]:
+    """First key_env that is actually set in the environment (tries in order)."""
+    for env in spec.key_envs:
+        v = os.environ.get(env)
+        if v:
+            return v
+    return None
 
 # Non-reasoning instruct model: judge prompts cap max_tokens at ~24, which a
 # reasoning model would burn on hidden thought and return nothing.
@@ -141,13 +221,20 @@ _client_lock = threading.Lock()
 _clients: Dict[str, OpenAI] = {}
 
 
-def _get_client(api_key: str) -> OpenAI:
-    """One SDK client per key (thread-safe; shared connection pool)."""
+def _get_client(api_key: str, base_url: Optional[str] = None,
+                default_headers: Optional[Dict[str, str]] = None) -> OpenAI:
+    """One SDK client per (base_url, key) pair (thread-safe; shared connection
+    pool). base_url defaults to BASE_URL (the Baseten shared endpoint), so the
+    existing callers are unchanged; EXTERNAL providers pass their own base_url."""
+    burl = base_url or BASE_URL
+    ck = f"{burl}||{api_key}"
     with _client_lock:
-        client = _clients.get(api_key)
+        client = _clients.get(ck)
         if client is None:
-            client = _clients[api_key] = OpenAI(base_url=BASE_URL,
-                                                api_key=api_key)
+            kw: Dict[str, Any] = {"base_url": burl, "api_key": api_key}
+            if default_headers:
+                kw["default_headers"] = dict(default_headers)
+            client = _clients[ck] = OpenAI(**kw)
         return client
 
 
@@ -234,6 +321,58 @@ def _call_dedicated(req: BatchRequest, max_retries: int, timeout: float) -> Batc
                        f"failed after {retries} attempts: {last}", req.model, req.meta)
 
 
+def _call_external(req: BatchRequest, max_retries: int, timeout: float) -> BatchResult:
+    """A model hosted off Baseten (Anthropic / OpenAI / OpenRouter). Uses the
+    provider's own base_url + API key from EXTERNAL[req.model], IGNORING the
+    caller's api_key. Applies the provider's request quirks (max_completion_tokens
+    vs max_tokens, temperature omission, reasoning extra_body). Same
+    retry/backoff contract as call_one; never raises."""
+    spec = EXTERNAL[req.model]
+    key = _resolve_provider_key(spec)
+    if not key:
+        return BatchResult(req.id, False, "",
+                           f"external model {req.model} needs one of {spec.key_envs} in .env",
+                           req.model, req.meta)
+    client = _get_client(key, spec.base_url, spec.default_headers)
+    to = max(timeout, spec.timeout)
+    kwargs: Dict[str, Any] = {"model": spec.served_model,
+                              "messages": req.messages, "timeout": to}
+    if spec.use_max_completion_tokens:
+        kwargs["max_completion_tokens"] = req.max_tokens
+    else:
+        kwargs["max_tokens"] = req.max_tokens
+    if spec.send_temperature:
+        kwargs["temperature"] = (spec.temperature_override
+                                 if spec.temperature_override is not None
+                                 else req.temperature)
+    if spec.extra_body:
+        kwargs["extra_body"] = spec.extra_body
+    last_err = ""
+    for attempt in range(max_retries):
+        try:
+            resp = client.chat.completions.create(**kwargs)
+            choice = resp.choices[0]
+            content = choice.message.content
+            if content is None or not str(content).strip():
+                last_err = f"empty completion (finish_reason={choice.finish_reason})"
+                time.sleep(2.0 * (attempt + 1))
+                continue
+            return BatchResult(req.id, True, str(content), "", req.model, req.meta)
+        except RateLimitError as e:
+            last_err = f"rate limited: {e}"
+            time.sleep(min(90.0, 10.0 * (2 ** attempt)))
+        except RETRYABLE as e:
+            last_err = f"{type(e).__name__}: {e}"
+            time.sleep(min(60.0, 5.0 * (2 ** attempt)))
+        except Exception as e:   # auth, bad request, model not found — no retry
+            return BatchResult(req.id, False, "",
+                               f"non-retryable {type(e).__name__}: {e}",
+                               req.model, req.meta)
+    return BatchResult(req.id, False, "",
+                       f"failed after {max_retries} attempts: {last_err}",
+                       req.model, req.meta)
+
+
 @dataclass
 class BatchRequest:
     """One chat completion. `id` must be unique and stable across reruns —
@@ -280,8 +419,11 @@ def call_one(req: BatchRequest, api_key: str, max_retries: int = 5,
              timeout: float = 180.0) -> BatchResult:
     """One request with exponential-backoff retries on transient failures;
     fails fast on auth/validation errors; never raises. Dedicated Baseten
-    deployments route to their own endpoint (DEPLOYED2 key); everything else
-    (incl. the gpt-oss extractor) uses the shared endpoint + api_key."""
+    deployments route to their own endpoint (DEPLOYED2 key); EXTERNAL models route
+    to their own provider (Anthropic/OpenAI/OpenRouter); everything else (incl.
+    the gpt-oss extractor) uses the shared endpoint + api_key."""
+    if req.model in EXTERNAL:
+        return _call_external(req, max_retries, timeout)
     if req.model in DEDICATED:
         return _call_dedicated(req, max_retries, timeout)
     client = _get_client(api_key)
