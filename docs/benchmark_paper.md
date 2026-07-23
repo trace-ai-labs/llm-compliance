@@ -67,10 +67,15 @@ with banking and insurance leading adoption at 47% — precisely the regulated
 functions where a compliance failure is a legal event, and where
 [60% of finance leaders already cite governance as the primary barrier](https://joget.com/ai-agent-adoption-in-2026-what-the-analysts-data-shows/).
 There is no benchmark a deployer can consult that answers "which model holds the
-rule under a rushed manager?" PACT is built to be that instrument. Our v1 run
-shows the question is not academic: the rollup score spans **0.89 (Kimi-K2.7-Code)
-down to 0.18 (Mistral-7B)** across a single, identically-scored panel, and the
-rank order is *not* recoverable from model size or vendor prestige.
+rule under a rushed manager?" PACT is built to be that instrument, and its answer
+is uncomfortable. We score **per-item reliability** — did the model hold the rule on
+*every* one of three identical runs — because a compliance agent has to be right
+every time, not on average. On that bar, across a 22-model panel, **even the
+strongest model is unreliable on ~5% of items, most of the field on ~10%, and the
+weakest on 40–50%**, and the ranking is *not* recoverable from model size or vendor
+prestige. For a function where a single violation is a legal event, a model that is
+"right 95% of the time" is a model that files an incident every twentieth
+interaction — none of these is one you hand the keys to unsupervised.
 
 ---
 
@@ -406,6 +411,10 @@ fraction of scored cells the model complied on across *all three* independent re
 — with axis 5 held out of the harmonic-mean cross-check. pass^3 is a per-item
 reliability statistic: a cell counts only if the model held on every repetition, so
 an occasionally-slipping model is penalized where an average would absorb the slip.
+This matches the deployment bar — a compliance agent must be right *every* time, not
+on average — so a metric that credits only unbroken reliability is the honest one,
+and a headline of 0.9 reads correctly as "unreliable on one item in ten" rather than
+as a comfortable A-minus.
 Each axis is a directional theoretical prediction, not a post-hoc cut, and each is
 reported with its own reliability. The v1 range across the 22-model panel is given
 for each.
@@ -487,8 +496,25 @@ sorted by the pass^3 rollup:
 | 21 | llama-3.1-8b-instruct | open | 0.588 | [0.617, 0.653] |
 | 22 | mistral-7b-instruct | open | 0.508 | [0.527, 0.575] |
 
-Read this as a profile, not a horse race: the top cluster (Haiku, Kimi-K2.7, Luna,
-Qwen) is CI-overlapping, and rank on the rollup does not reproduce within any single
+**Read the absolute numbers as an alarm, not a grade.** pass^3 asks whether a model
+held the rule on *every* one of three identical runs, because the deployment bar is
+unforgiving: an enterprise compliance agent has to be right every time, not on
+average. So 1 − pass^3 is the share of items on which the model simply *cannot be
+relied on* — it slipped at least once. Under that lens the leaderboard is sobering,
+not reassuring. The best model in the panel, Claude Haiku 4.5, still fails to
+reliably hold on ~5% of items; much of the field clusters near 0.90 — roughly one
+unreliable item in ten; and the weakest models miss 40–50%. In a regulated function
+where a *single* violation is a legal event — a mis-stated refund policy, an
+out-of-scope PHI disclosure, a structured payment — "right 90–95% of the time" is
+not a passing grade. It is one avoidable incident every ten to twenty interactions.
+The leaderboard does not name a model that is safe to run autonomously; it ranks
+*how much oversight each still needs*, and on this benchmark even the leader needs a
+lot. That reframing is the point of scoring reliability rather than an average: the
+mean quietly rounds a 1-in-20 failure rate up to "fine," and in compliance it is not
+fine.
+
+Beyond the absolute levels, read the shape as a profile, not a horse race: the top
+cluster (Haiku, Kimi-K2.7, Luna, Qwen) is CI-overlapping, and rank on the rollup does not reproduce within any single
 axis — GLM-5.2 scores near the top on honesty (0.84) while sitting mid-pack on
 steerability (0.37); Grok-4.3 holds strongly under pushback (pass^3 0.99) yet lands
 18th overall, dragged down by weak discernment and steerability. The single highest

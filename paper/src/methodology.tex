@@ -29,24 +29,22 @@ the trial records; only axis~5 consumes a judge.
 
 \begin{enumerate}
 \item \textbf{Default Compliance} --- \emph{does it comply when nothing is pushing?}
-Mean compliance on neutral cells, domain-equal weighted. The baseline every stressor
-is read against.
+$\text{pass}^3$ on neutral binding cells: the fraction the model holds the rule on
+across all three replications. The baseline every stressor is read against.
 
-\item \textbf{Pressure Resistance} --- \emph{does it hold under the worst pressure,
-not the average one?} A mean over pressure cells hides the single family that floors
-the model, which is exactly the cell a deployer meets in production. We report a
-cross-fitted CVaR$_{0.25}$: the mean compliance of the worst quartile of cells, with
-the tail selected on one random half of a cell's replications and scored on the
-held-out half (50 splits). Cross-fitting removes the winner's-curse bias of a plain
-tail estimate; we also report na\"ive CVaR and a \emph{fragility breadth} (how many
-families break the model), because being broken by one vector differs from being
-broken by six.
+\item \textbf{Pressure Resistance} --- \emph{does it hold under pressure, reliably?}
+A mean over pressure cells hides both the family that floors the model and the model
+that holds on average but slips one run in three. We score $\text{pass}^3$: the
+fraction of pressure cells the model complies on for \emph{every} replication. A cell
+counts only if it is unanimous, so an occasionally-slipping model is penalized where
+a mean would absorb the slip. We report it beside a na\"ive worst-quartile mean and a
+\emph{fragility breadth} (how many families break the model), because being broken by
+one vector differs from being broken by six.
 
 \item \textbf{Pushback Resistance} --- \emph{does it hold when the user argues back?}
-$P(\text{hold at turn 2}\mid\text{pushback})$, but over a \emph{fixed common-core}
-set of items a quorum of the panel complies with at turn~1, identical across models.
-This fixes the self-selected denominator that would otherwise grade a weak model only
-on its handful of easy items and flatter it.
+$\text{pass}^3$ of holding at turn~2 given the model complied at turn~1 and was then
+pushed back, over the model's own turn-1-compliant items. It measures erosion under a
+persistent interlocutor; recovery is reported separately as a diagnostic.
 
 \item \textbf{Steerability} --- \emph{if it fails, can an explicit guardrail fix it?}
 Every cell is run twice: base persona, and base plus the scenario's generated hard
@@ -63,25 +61,24 @@ models have the least data (undefined maps to 1, held out of the harmonic mean),
 because it is near-100\% judged it carries its own reliability gate.
 
 \item \textbf{Rule-Scope Discernment} --- \emph{does it apply the rule only where it
-binds?} Balanced accuracy
-$\tfrac12[P(\text{comply}\mid\text{binding})+P(\text{stand-down}\mid\text{non-binding})]$,
-with the under-attack cells folded in. Balanced averaging pins a degenerate
-always-comply or always-violate agent at 0.5, and a 20\% needless-escalation ceiling
-on the non-binding guard keeps ``escalate everything'' from scoring.
+binds?} $\text{pass}^3$ over the union of binding and non-binding scope cells, where
+``comply'' is the correct scope call in each direction (follow the rule where it
+binds, stand down where it does not), with the under-attack cells folded in. The
+binding and stand-down terms are reported separately; the discriminating signal is in
+the stand-down term, since the binding term overlaps axis~1.
 \end{enumerate}
 
-\paragraph{Rollup and un-gameability.} The scalar summary is a
-two-stage-bootstrapped cross-fitted CVaR over the pooled scored cells, reported
-beside its plain mean (the floor-versus-mean gap is itself informative), a harmonic
-mean over axes 1--4 and 6 (axis 5 held out), and a mean win rate. We publish the full
-inter-axis correlation matrix and per-axis $\kappa$ rather than asserting
-orthogonality, since the axes span a reliability range (1, 2, 4 near-deterministic; 3
-turn-parsing; 6 mostly deterministic; 5 all-judge) a pooled number would hide.
-Finally, four trivial agents (\textsc{always-comply}, \textsc{always-cheapest},
-\textsc{always-escalate}, \textsc{random}) run on every release: if any out-ranks a
-real model on any axis, that axis is broken by construction and is pulled from the
-headline. The guard cells, balanced-accuracy discernment, and escalation ceiling are
-the specific defenses that keep each degenerate policy off the top.
+\paragraph{Rollup.} The scalar summary is a two-stage-bootstrapped $\text{pass}^3$
+over the pooled scored cells --- the fraction of all scored items the model complies
+on across every replication --- reported beside its plain mean (the
+reliability-versus-mean gap is itself informative), a harmonic mean over axes 1--4
+and 6 (axis 5 held out), and a mean win rate. Scoring per-item reliability rather
+than an average is deliberate: a compliance agent has to be right \emph{every} time,
+not on average, so a rollup of $0.9$ reads correctly as ``unreliable on one item in
+ten'' rather than as a comfortable grade. We publish the full inter-axis correlation
+matrix and per-axis $\kappa$ rather than asserting orthogonality, since the axes span
+a reliability range (1, 2, 4 near-deterministic; 3 turn-parsing; 6 mostly
+deterministic; 5 all-judge) a pooled number would hide.
 
 \subsection{Building the Benchmark}
 \label{sec:building}
@@ -175,7 +172,7 @@ Rendering is then deterministic: each pack yields its surviving subset of the 13
 battery (one neutral, nine pressure, one non-binding guard, two under-attack), with
 gold labels, split tags, a canary GUID, and a committed SHA-256 that acts as the
 pre-registration. This release comprises $141$ of a possible $144$ packs (all $48$
-scenarios covered, authorship balanced across the three generators) and $1{,}728$
+scenarios covered, authorship balanced across the three generators) and $1{,}737$
 items after partial packs.
 
 \subsubsection{Evaluation protocol.}
@@ -183,7 +180,7 @@ items after partial packs.
 One trial is an (item, model, replication, arm) tuple: send system plus turn~1, judge
 it, select the conditional turn~2, send it with history, judge again. Trials are keyed
 by a stable id and appended to disk, so a killed run resumes; the budget is three
-replications across a 12-model panel, with floor-defining cells topped up to $n\geq50$.
+replications across a 22-model panel, with floor-defining cells topped up to $n\geq50$.
 Judging is deterministic-first: a rule-based extractor resolves most responses for
 free, a small non-reasoning judge sees only the residual, and every row logs the judge
 and a prompt hash. The honesty judge uses the three generators leave-one-out. A
