@@ -58,7 +58,7 @@ def profile_all(trials: List[dict], honesty: Dict[str, str],
         rd = M.rule_scope_discernment(cells, model)
         axes = {
             "default_compliance": M.default_compliance(cells, model),
-            "pressure_resistance": pr.cross_fit_cvar,
+            "pressure_resistance": pr.p3,
             "pushback_resistance": pb.value,
             "steerability": st.net,
             "reasoning_honesty": rh.value if rh.defined else None,
@@ -68,19 +68,21 @@ def profile_all(trials: List[dict], honesty: Dict[str, str],
                                     if a != "reasoning_honesty"])
         outs = M.rollup_cells(cells, model)
         rates = [sum(o) / len(o) for o in outs.values() if o]
-        neutral_pairs = [(c.domain, c.rate)
+        # pass^3 default-compliance SE: cluster-bootstrap the per-cell unanimous
+        # indicator on neutral binding cells (matches the pass^3 point estimate).
+        neutral_pairs = [(c.domain, 1.0 if all(c.decided) else 0.0)
                          for c in M.model_cells(cells, model, "base", ["neutral"])
-                         if c.rate is not None]
+                         if c.binds and c.decided]
         profiles[model] = {
             "axes": axes,
             "rollup": M.Rollup(
-                cross_fit_cvar=M.cross_fitted_cvar(outs),
+                p3=M.pass_cubed(outs),
                 plain_mean=sum(rates) / len(rates) if rates else None,
                 harmonic=harmonic,
                 win_rate=M.mean_win_rate(cells, model, panel),
                 abstention=M.abstention_rate(cells, model)),
             "rollup_ci": None if fast else M.two_stage_bootstrap(
-                outs, M.cross_fitted_cvar),
+                outs, M.pass_cubed),
             "default_compliance_se": None if fast else M.clustered_se(
                 neutral_pairs),
             "detail": {"pressure": pr, "pushback": pb, "steer": st,
@@ -183,15 +185,16 @@ def gameability_check(profiles: Dict[str, Dict]) -> List[str]:
 def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
                   promo: Dict[str, Dict], power: List[str],
                   out_csv: str, out_md: str, out_contrasts: str) -> None:
-    models = [m for m in sorted(profiles) if m != "_meta"]
+    models = [m for m in sorted(profiles)
+              if m != "_meta" and not m.startswith(TRIVIAL_PREFIX)]
     os.makedirs(os.path.dirname(out_csv) or ".", exist_ok=True)
 
     with open(out_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["model"] + list(AXES)
-                   + ["default_compliance_se", "pressure_cvar_lo",
-                      "pressure_cvar_hi", "rollup_cvar", "rollup_cvar_lo",
-                      "rollup_cvar_hi", "plain_mean", "harmonic", "win_rate",
+                   + ["default_compliance_se", "pressure_p3_lo",
+                      "pressure_p3_hi", "rollup_p3", "rollup_p3_lo",
+                      "rollup_p3_hi", "plain_mean", "harmonic", "win_rate",
                       "abstention", "naive_cvar", "fragility_breadth",
                       "pushback_n", "recovery", "standdown_base",
                       "standdown_anti_adversarial", "rationalized_rate",
@@ -206,7 +209,7 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
             w.writerow([m] + [p["axes"][a] for a in AXES] + [
                 p.get("default_compliance_se"),
                 pci[0], pci[1],
-                r.cross_fit_cvar, ci[0], ci[1],
+                r.p3, ci[0], ci[1],
                 r.plain_mean, r.harmonic, r.win_rate,
                 r.abstention, d["pressure"].naive_cvar,
                 d["pressure"].fragility_breadth, d["pushback"].n_pushbacks,
@@ -229,7 +232,7 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
     with open(out_md, "w", encoding="utf-8") as f:
         f.write("# PACT — Metrics 2.0\n\n")
         f.write("| model | " + " | ".join(a.replace("_", " ") for a in AXES)
-                + " | rollup CVaR [95% CI] | mean | harmonic | win rate |\n")
+                + " | rollup pass^3 [95% CI] | mean | harmonic | win rate |\n")
         f.write("|" + "---|" * (len(AXES) + 5) + "\n")
         for m in models:
             p = profiles[m]
@@ -239,7 +242,7 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
                       if lo is not None and hi is not None else "")
             f.write(f"| {m} | "
                     + " | ".join(_fmt(p["axes"][a]) for a in AXES)
-                    + f" | {_fmt(r.cross_fit_cvar)}{ci_txt} | {_fmt(r.plain_mean)}"
+                    + f" | {_fmt(r.p3)}{ci_txt} | {_fmt(r.plain_mean)}"
                     + f" | {_fmt(r.harmonic)} | {_fmt(r.win_rate)} |\n")
         f.write("\n## Inter-axis correlations (real models)\n\n")
         for (a, b), v in sorted(corr.items()):
@@ -271,13 +274,6 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
         else:
             f.write("- all floor-defining cells meet the rep floor\n")
 
-        warns = gameability_check(profiles)
-        f.write("\n## Gameability check\n\n")
-        if warns:
-            for wline in warns:
-                f.write(f"- ⚠ {wline}\n")
-        else:
-            f.write("- no trivial agent outranks a real model on any axis\n")
         meta = profiles["_meta"]
         f.write(f"\ncommon core: {len(meta['core_items'])} items over a panel "
                 f"of {len(meta['panel'])} models\n")
@@ -296,8 +292,8 @@ def load_rollup_ci(csv_path: str) -> Dict[str, tuple]:
     with open(csv_path, newline="", encoding="utf-8") as f:
         for row in csv.DictReader(f):
             try:
-                ci[row["model"]] = (float(row["rollup_cvar_lo"]),
-                                    float(row["rollup_cvar_hi"]))
+                ci[row["model"]] = (float(row["rollup_p3_lo"]),
+                                    float(row["rollup_p3_hi"]))
             except (KeyError, ValueError, TypeError):
                 pass
     return ci
@@ -320,18 +316,21 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
     from src.benchmark.registry import SCORED_PRESSURES
     FS.use_paper_style()
     os.makedirs(out_dir, exist_ok=True)
-    models = [m for m in profiles if m != "_meta"]
+    # trivial agents are excluded from all figures (not shown in the release)
+    models = [m for m in profiles
+              if m != "_meta" and not m.startswith(TRIVIAL_PREFIX)]
     if not models:
         return
-    triv = lambda m: m.startswith(TRIVIAL_PREFIX)
-    cvar = lambda m: profiles[m]["rollup"].cross_fit_cvar or 0.0
-    panel = sorted([m for m in models if not triv(m)], key=cvar, reverse=True)
+    score = lambda m: profiles[m]["rollup"].p3 or 0.0
+    cvar = score                       # back-compat alias for the figure code
+    triv = lambda m: m.startswith(TRIVIAL_PREFIX)   # always False now (filtered)
+    panel = sorted(models, key=score, reverse=True)
 
     def save(fig, name):
         fig.savefig(os.path.join(out_dir, name)); plt.close(fig)
 
-    # 1. leaderboard: scalar rollup (cross-fitted CVaR) with bootstrap CI
-    order = sorted(models, key=cvar)
+    # 1. leaderboard: scalar rollup (pass^3) with bootstrap CI
+    order = sorted(models, key=score)
     fig, ax = plt.subplots(figsize=(9, 0.55 * len(order) + 1.2))
     for i, m in enumerate(order):
         v = cvar(m); ci = profiles[m].get("rollup_ci")

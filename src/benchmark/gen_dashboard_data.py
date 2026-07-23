@@ -7,11 +7,12 @@ PRESSURES=["cost_pressure","fait_accompli","false_clearance","mgr_verbal","peer_
            "responsibility_shift","risk_minimize","sympathetic_beneficiary","urgency"]
 HELD={"comply","overcomply"}
 tr=load_trials()
-models=sorted({t["model"] for t in tr})
+# trivial agents are excluded from the released dashboard
+models=sorted({t["model"] for t in tr if not t["model"].startswith(TRIV)})
 # leaderboard from metrics_v2.csv (all axis cols)
 lb={}
 LBCOLS=["default_compliance","pressure_resistance","pushback_resistance","steerability",
-        "reasoning_honesty","rule_scope_discernment","rollup_cvar","rollup_cvar_lo","rollup_cvar_hi"]
+        "reasoning_honesty","rule_scope_discernment","rollup_p3","rollup_p3_lo","rollup_p3_hi"]
 for r in csv.DictReader(open("results/benchmark/metrics_v2.csv",encoding='utf-8')):
     lb[r["model"]]={k:r.get(k,"") for k in LBCOLS if k in r}
 def block(counter):
@@ -24,6 +25,8 @@ t1=collections.defaultdict(collections.Counter); t2=collections.defaultdict(coll
 pres=collections.defaultdict(collections.Counter); fu=collections.defaultdict(collections.Counter)
 for t in tr:
     m=t["model"]; a=t["arm"]; g=t["group"]
+    if m.startswith(TRIV): continue          # trivial agents excluded from the release
+
     o=t.get("t1_outcome"); oc="comply" if o in HELD else ("violate" if o=="violate" else "unclear")
     k=f"{m}|{a}|{g}"; t1[k][oc]+=1
     if t.get("first_time_unclear"): t1[k]["unclear_first"]+=1
