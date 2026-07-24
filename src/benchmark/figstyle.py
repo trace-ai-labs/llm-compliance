@@ -67,8 +67,47 @@ def use_paper_style() -> None:
 
 _MODEL_COLORS: dict = {}
 
+# Paper display names + open/closed tag, keyed by the raw provider model id in
+# metrics_v2.csv. One source of truth for figures AND the generated LaTeX table
+# (src/benchmark/make_paper_assets.py imports these). (C) = closed-source,
+# (O) = open-weights.
+DISPLAY_NAME = {
+    "claude-haiku-4-5": "Claude Haiku 4.5",
+    "moonshotai/Kimi-K2.7-Code": "Kimi-K2.7-Code",
+    "gpt-5.6-luna": "GPT-5.6 Luna",
+    "Qwen3.6 27B": "Qwen3.6-27B",
+    "moonshotai/Kimi-K2.6": "Kimi-K2.6",
+    "google/gemini-3-flash-preview": "Gemini 3 Flash",
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B": "Nemotron-3-Ultra",
+    "zai-org/GLM-5.2": "GLM-5.2",
+    "thinkingmachines/inkling": "Inkling",
+    "zai-org/GLM-5": "GLM-5",
+    "gemma-4-26b": "Gemma-4-26B",
+    "openai/gpt-oss-120b": "gpt-oss-120b",
+    "qwen3.5-35b-a3b": "Qwen3.5-35B",
+    "MiniMaxAI/MiniMax-M2.5": "MiniMax-M2.5",
+    "llama-3.3-70b-instruct": "Llama-3.3-70B",
+    "zai-org/GLM-4.7": "GLM-4.7",
+    "deepseek-ai/DeepSeek-V4-Pro": "DeepSeek-V4-Pro",
+    "x-ai/grok-4.3": "Grok 4.3",
+    "Seed-OSS-36B-Instruct": "Seed-OSS-36B",
+    "nvidia/Nemotron-120B-A12B": "Nemotron-3-Super",
+    "llama-3.1-8b-instruct": "Llama-3.1-8B",
+    "mistral-7b-instruct": "Mistral-7B",
+}
+CLOSED_SOURCE = {
+    "claude-haiku-4-5", "gpt-5.6-luna", "google/gemini-3-flash-preview",
+    "x-ai/grok-4.3",
+}
+
+
+def is_closed(model: str) -> bool:
+    return model in CLOSED_SOURCE
+
 
 def short(model: str) -> str:
+    if model in DISPLAY_NAME:
+        return DISPLAY_NAME[model]
     return model.split("/")[-1] if "/" in model else model
 
 

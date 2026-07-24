@@ -342,7 +342,7 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
     ax.set_yticks(range(len(order)))
     ax.set_yticklabels([FS.short(m) for m in order])
     ax.set_xlim(0, 1.1)
-    ax.set_xlabel("Scalar rollup (cross-fitted CVaR, worst-quartile floor)")
+    ax.set_xlabel(r"Scalar rollup (pass$^3$: held on all three replications)")
     FS.strip_axes(ax)
     fig.tight_layout(); save(fig, "leaderboard.png")
 
@@ -364,29 +364,56 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
     fig.colorbar(im, ax=ax, shrink=0.7, label="score (higher better)")
     fig.tight_layout(); save(fig, "axes_heatmap.png")
 
-    # 3. radar / hexagon: all six axes at once (the profile IS the result)
+    # 3. radar small multiples: EVERY panel model as its own mini-hexagon, so
+    # all 22 profiles are shown (a single 22-line radar is unreadable). Each
+    # axis is min-max normalized ACROSS THE FULL PANEL so facets are comparable,
+    # and the panel median is drawn as a gray reference in every facet. Raw axis
+    # values cluster near the ceiling on four axes and near the floor on
+    # steerability, so absolute radii would be illegible; normalization makes the
+    # shape differences (who is weak where) visible.
     N = len(AXES)
     ang = [n / N * 2 * np.pi for n in range(N)] + [0.0]
-    # radar/hexagon: real-model panel only - trivial oracles excluded here
-    # (they remain in the leaderboard, heatmap, and metrics tables).
-    radar_models = panel[:6]
-    if radar_models:
-        fig = plt.figure(figsize=(7.5, 7.5))
-        ax = fig.add_subplot(111, polar=True)
-        for m in radar_models:
-            vals = [(profiles[m]["axes"][a] if profiles[m]["axes"][a] is not None
-                     else 0.0) for a in AXES]
+    sm_models = sorted(panel, key=score, reverse=True)
+    if sm_models:
+        amin = {a: min(profiles[m]["axes"][a] or 0.0 for m in sm_models)
+                for a in AXES}
+        amax = {a: max(profiles[m]["axes"][a] or 0.0 for m in sm_models)
+                for a in AXES}
+
+        def _med(a):
+            xs = sorted(profiles[m]["axes"][a] or 0.0 for m in sm_models)
+            k = len(xs)
+            return xs[k // 2] if k % 2 else (xs[k // 2 - 1] + xs[k // 2]) / 2
+
+        def _norm(v, a):
+            lo, hi = amin[a], amax[a]
+            return (v - lo) / (hi - lo) if hi > lo else 0.5
+
+        medvals = [_norm(_med(a), a) for a in AXES]
+        medvals += medvals[:1]
+        abbr = ["Def", "Prs", "Psh", "Str", "Hon", "Scp"]
+        ncols = 4
+        nrows = -(-len(sm_models) // ncols)
+        fig, axarr = plt.subplots(nrows, ncols, figsize=(3.0 * ncols, 3.1 * nrows),
+                                  subplot_kw=dict(polar=True))
+        for idx, m in enumerate(sm_models):
+            ax = axarr.flat[idx]
+            vals = [_norm(profiles[m]["axes"][a] or 0.0, a) for a in AXES]
             vals += vals[:1]
-            col = FS.RED if triv(m) else FS.model_color(m)
-            ax.plot(ang, vals, "--" if triv(m) else "-", color=col, lw=2.2,
-                    label=FS.short(m))
-            ax.fill(ang, vals, color=col, alpha=0.08)
-        ax.set_xticks(ang[:-1])
-        ax.set_xticklabels([FS.AXIS_LABEL[a].replace("\n", " ") for a in AXES],
-                           fontsize=13)
-        ax.set_ylim(0, 1); ax.set_yticks([0.25, 0.5, 0.75, 1.0])
-        ax.set_yticklabels([".25", ".5", ".75", "1"], fontsize=11, color=FS.MUTED)
-        ax.legend(loc="upper right", bbox_to_anchor=(1.32, 1.12), frameon=False)
+            col = FS.model_color(m)
+            ax.plot(ang, medvals, color=FS.MUTED, lw=1.0, ls=":", zorder=1)
+            ax.fill(ang, vals, color=col, alpha=0.25, zorder=2)
+            ax.plot(ang, vals, color=col, lw=1.6, zorder=3)
+            ax.set_xticks(ang[:-1])
+            ax.set_xticklabels(abbr, fontsize=8, color=FS.INK)
+            ax.set_ylim(0, 1)
+            ax.set_yticks([])
+            ax.set_title(f"{FS.short(m)}\n({score(m):.2f})", fontsize=10,
+                         color=FS.INK, pad=8)
+            ax.tick_params(pad=-2)
+        for j in range(len(sm_models), nrows * ncols):
+            axarr.flat[j].axis("off")
+        fig.tight_layout(h_pad=2.2, w_pad=1.0)
         save(fig, "radar.png")
 
     # 4. inter-axis correlation across the real-model panel
