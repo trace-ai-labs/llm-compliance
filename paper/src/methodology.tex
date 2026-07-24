@@ -9,100 +9,8 @@ item is run across two conversation turns and in two \emph{arms} --- a plain
 instruction to follow the rule; the gap between the two arms is what we call
 steerability. Each item belongs to one of five groups --- \emph{neutral},
 \emph{pressure}, \emph{guard}, and two \emph{under-attack} --- that decide which axes
-it feeds. We present the design metrics-first, because the metrics are what a deployer
-consumes and they motivate everything else; \S\ref{sec:building} then shows how the
-items that feed them are built and audited.
-
-\subsection{Metrics for Assessment}
-\label{sec:metrics}
-
-\paragraph{Why a profile, not a score.} ``Will this agent follow the rule?'' looks
-like one question, but it is not. On data from a prior single-domain study (\S\ref{sec:validation})
-compliance is not a single latent trait: the first principal component of the
-model-by-condition rate matrix explains only 47\% of the variance, the behavioral
-dimensions inter-correlate at most 0.64, and a score computed \emph{without} a given
-pressure family predicts a model's rank \emph{on} that family only weakly (Spearman
-$\rho$ from 0.33 to 0.84). A model robust to a manager's order is not reliably robust
-to a deadline. A single scalar would therefore be wrong about the structure of the
-phenomenon, not merely lossy, and it would let a model average away the one condition
-where it catastrophically fails. PACT instead reports six axes, each a distinct
-question a deployer actually asks and each engineered against a specific way a naive
-metric misleads. All are on $[0,1]$, higher better, computed by pure functions over
-the trial records; only axis~5 consumes a judge. On the 22-model panel the axes fall
-into three near-independent factors (Figure~\ref{fig:axiscorr}): a rule-holding
-cluster (default compliance, pressure and pushback resistance, rule-scope
-discernment) that covaries because a capable model tends to hold across conditions,
-plus \emph{steerability} and \emph{honesty}, each near-uncorrelated with the cluster
-and with each other. The practical consequence is the same as the design argument: a
-scalar dominated by the rule-holding cluster is nearly blind to the two axes on which
-the field is weakest and most variable, so the axes must be reported, not summed.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{figures/axis_correlation.png}
-\caption{Inter-axis Pearson correlation across the 22-model panel. The four
-rule-holding axes covary strongly ($r=0.88$--$0.95$), but steerability and honesty
-are near-orthogonal to that cluster and to each other, so the six axes carry three
-distinct signals rather than one.}
-\label{fig:axiscorr}
-\end{figure}
-
-\begin{enumerate}
-\item \textbf{Default Compliance} --- \emph{does it comply when nothing is pushing?}
-$\text{pass}^3$ on neutral binding cells: the fraction of items the model holds the
-rule on across \emph{all} three replications. Throughout, $\text{pass}^3$ is
-$\tau$-bench's pass$^k$ estimator~\citep{yao2024taubench} at $k=3$ --- credit for a
-task requires every replication to succeed, not their average --- which is why a
-model that slips one run in three is scored as unreliable on that item rather than as
-``0.67.'' This is the baseline every stressor is read against.
-
-\item \textbf{Pressure Resistance} --- \emph{does it hold under pressure, reliably?}
-A mean over pressure cells hides both the family that floors the model and the model
-that holds on average but slips one run in three. We score $\text{pass}^3$: the
-fraction of pressure cells the model complies on for \emph{every} replication. A cell
-counts only if it is unanimous, so an occasionally-slipping model is penalized where
-a mean would absorb the slip. We report it beside a na\"ive worst-quartile mean and a
-\emph{fragility breadth} (how many families break the model), because being broken by
-one vector differs from being broken by six.
-
-\item \textbf{Pushback Resistance} --- \emph{does it hold when the user argues back?}
-$\text{pass}^3$ of holding at turn~2 given the model complied at turn~1 and was then
-pushed back, over the model's own turn-1-compliant items. It measures erosion under a
-persistent interlocutor; recovery is reported separately as a diagnostic.
-
-\item \textbf{Steerability} --- \emph{if it fails, can an explicit guardrail fix it?}
-Every cell is run twice: base persona, and base plus the scenario's generated hard
-directive. The score is $\text{net}=\text{recovery}-\max(0,\,\text{standdown}_{\text{base}}
--\text{standdown}_{\text{anti}})$, where recovery is the fraction of \emph{base
-violations} the mandate repairs (measured only where the base model fails, so there
-is no ceiling artifact) and the penalty stops the mandate from ``working'' by turning
-the model into a blanket always-comply agent.
-
-\item \textbf{Reasoning Honesty} --- \emph{when it violates, does it admit it?}
-Over violations, $1-\text{silent rate}$, with each violation labeled silent,
-rationalized, or defiant-honest. Because the denominator is violations, the best
-models have the least data (undefined maps to 1, held out of the harmonic mean), and
-because it is near-100\% judged it carries its own reliability gate.
-
-\item \textbf{Rule-Scope Discernment} --- \emph{does it apply the rule only where it
-binds?} $\text{pass}^3$ over the union of binding and non-binding scope cells, where
-``comply'' is the correct scope call in each direction (follow the rule where it
-binds, stand down where it does not), with the under-attack cells folded in. The
-binding and stand-down terms are reported separately; the discriminating signal is in
-the stand-down term, since the binding term overlaps axis~1.
-\end{enumerate}
-
-\paragraph{Rollup.} The scalar summary is a two-stage-bootstrapped $\text{pass}^3$
-over the pooled scored cells --- the fraction of all scored items the model complies
-on across every replication --- reported beside its plain mean (the
-reliability-versus-mean gap is itself informative), a harmonic mean over axes 1--4
-and 6 (axis 5 held out), and a mean win rate. Scoring per-item reliability rather
-than an average is deliberate: a compliance agent has to be right \emph{every} time,
-not on average, so a rollup of $0.9$ reads correctly as ``unreliable on one item in
-ten'' rather than as a comfortable grade. We publish the full inter-axis correlation
-matrix and per-axis $\kappa$ rather than asserting orthogonality, since the axes span
-a reliability range (1, 2, 4 near-deterministic; 3 turn-parsing; 6 mostly
-deterministic; 5 all-judge) a pooled number would hide.
+it feeds. We first describe how an item is built and audited (\S\ref{sec:building}),
+then the six metrics those items feed (\S\ref{sec:metrics}).
 
 \subsection{Building the Benchmark}
 \label{sec:building}
@@ -222,3 +130,94 @@ beside the leaderboard, never folded in. Throughout we report Wilson intervals p
 cell, item-clustered standard errors, Benjamini--Hochberg-corrected bootstrap
 contrasts, and two-stage bootstrap on rollups; at temperature 1.0 results are
 statistical estimates and always carry intervals.
+
+\subsection{Metrics for Assessment}
+\label{sec:metrics}
+
+\paragraph{Why a profile, not a score.} ``Will this agent follow the rule?'' looks
+like one question, but it is not. On data from a prior single-domain study (\S\ref{sec:validation})
+compliance is not a single latent trait: the first principal component of the
+model-by-condition rate matrix explains only 47\% of the variance, the behavioral
+dimensions inter-correlate at most 0.64, and a score computed \emph{without} a given
+pressure family predicts a model's rank \emph{on} that family only weakly (Spearman
+$\rho$ from 0.33 to 0.84). A model robust to a manager's order is not reliably robust
+to a deadline. A single scalar would therefore be wrong about the structure of the
+phenomenon, not merely lossy, and it would let a model average away the one condition
+where it catastrophically fails. PACT instead reports six axes, each a distinct
+question a deployer actually asks and each engineered against a specific way a naive
+metric misleads. All are on $[0,1]$, higher better, computed by pure functions over
+the trial records; only axis~5 consumes a judge. On the 22-model panel the axes fall
+into three near-independent factors (Figure~\ref{fig:axiscorr}): a rule-holding
+cluster (default compliance, pressure and pushback resistance, rule-scope
+discernment) that covaries because a capable model tends to hold across conditions,
+plus \emph{steerability} and \emph{honesty}, each near-uncorrelated with the cluster
+and with each other. The practical consequence is the same as the design argument: a
+scalar dominated by the rule-holding cluster is nearly blind to the two axes on which
+the field is weakest and most variable, so the axes must be reported, not summed.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/axis_correlation.png}
+\caption{Inter-axis Pearson correlation across the 22-model panel. The four
+rule-holding axes covary strongly ($r=0.88$--$0.95$), but steerability and honesty
+are near-orthogonal to that cluster and to each other, so the six axes carry three
+distinct signals rather than one.}
+\label{fig:axiscorr}
+\end{figure}
+
+\begin{enumerate}
+\item \textbf{Default Compliance} --- \emph{does it comply when nothing is pushing?}
+$\text{pass}^3$ on neutral binding cells: the fraction of items the model holds the
+rule on across \emph{all} three replications. Throughout, $\text{pass}^3$ is
+$\tau$-bench's pass$^k$ estimator~\citep{yao2024taubench} at $k=3$ --- credit for a
+task requires every replication to succeed, not their average --- which is why a
+model that slips one run in three is scored as unreliable on that item rather than as
+``0.67.'' This is the baseline every stressor is read against.
+
+\item \textbf{Pressure Resistance} --- \emph{does it hold under pressure, reliably?}
+A mean over pressure cells hides both the family that floors the model and the model
+that holds on average but slips one run in three. We score $\text{pass}^3$: the
+fraction of pressure cells the model complies on for \emph{every} replication. A cell
+counts only if it is unanimous, so an occasionally-slipping model is penalized where
+a mean would absorb the slip. We report it beside a na\"ive worst-quartile mean and a
+\emph{fragility breadth} (how many families break the model), because being broken by
+one vector differs from being broken by six.
+
+\item \textbf{Pushback Resistance} --- \emph{does it hold when the user argues back?}
+$\text{pass}^3$ of holding at turn~2 given the model complied at turn~1 and was then
+pushed back, over the model's own turn-1-compliant items. It measures erosion under a
+persistent interlocutor; recovery is reported separately as a diagnostic.
+
+\item \textbf{Steerability} --- \emph{if it fails, can an explicit guardrail fix it?}
+Every cell is run twice: base persona, and base plus the scenario's generated hard
+directive. The score is $\text{net}=\text{recovery}-\max(0,\,\text{standdown}_{\text{base}}
+-\text{standdown}_{\text{anti}})$, where recovery is the fraction of \emph{base
+violations} the mandate repairs (measured only where the base model fails, so there
+is no ceiling artifact) and the penalty stops the mandate from ``working'' by turning
+the model into a blanket always-comply agent.
+
+\item \textbf{Reasoning Honesty} --- \emph{when it violates, does it admit it?}
+Over violations, $1-\text{silent rate}$, with each violation labeled silent,
+rationalized, or defiant-honest. Because the denominator is violations, the best
+models have the least data (undefined maps to 1, held out of the harmonic mean), and
+because it is near-100\% judged it carries its own reliability gate.
+
+\item \textbf{Rule-Scope Discernment} --- \emph{does it apply the rule only where it
+binds?} $\text{pass}^3$ over the union of binding and non-binding scope cells, where
+``comply'' is the correct scope call in each direction (follow the rule where it
+binds, stand down where it does not), with the under-attack cells folded in. The
+binding and stand-down terms are reported separately; the discriminating signal is in
+the stand-down term, since the binding term overlaps axis~1.
+\end{enumerate}
+
+\paragraph{Rollup.} The scalar summary is a two-stage-bootstrapped $\text{pass}^3$
+over the pooled scored cells --- the fraction of all scored items the model complies
+on across every replication --- reported beside its plain mean (the
+reliability-versus-mean gap is itself informative), a harmonic mean over axes 1--4
+and 6 (axis 5 held out), and a mean win rate. Scoring per-item reliability rather
+than an average is deliberate: a compliance agent has to be right \emph{every} time,
+not on average, so a rollup of $0.9$ reads correctly as ``unreliable on one item in
+ten'' rather than as a comfortable grade. We publish the full inter-axis correlation
+matrix and per-axis $\kappa$ rather than asserting orthogonality, since the axes span
+a reliability range (1, 2, 4 near-deterministic; 3 turn-parsing; 6 mostly
+deterministic; 5 all-judge) a pooled number would hide.
