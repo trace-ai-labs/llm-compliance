@@ -44,9 +44,10 @@ AXES = [
 # The six-axis profile is a color-scaled LaTeX table (tables/leaderboard.tex),
 # not a figure, so axes_heatmap.png is intentionally not shipped to the paper.
 PAPER_FIGURES = [
+    "radar_overlay.png",     # results: curated 6-model contrast profile
     "per_pressure.png",      # results: fragility, which lever breaks which model
     "axis_correlation.png",  # methodology: the axes group into three factors
-    "radar.png",             # appendix: top-6 profile (per-axis scaled)
+    "radar.png",             # appendix: all-22 small-multiples profile
     "per_domain.png",        # appendix: per-domain base compliance
     "honesty_taxonomy.png",  # appendix: silent / rationalized / defiant split
 ]

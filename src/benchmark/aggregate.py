@@ -30,6 +30,20 @@ OUT_CONTRASTS = os.path.join("results", "benchmark", "contrasts_v2.csv")
 AXES = ("default_compliance", "pressure_resistance", "pushback_resistance",
         "steerability", "reasoning_honesty", "rule_scope_discernment")
 
+# Curated overlay radar (figures/radar_overlay.png): a small diverse set chosen to
+# contrast profiles - a leader, a balanced/steerable model, a coder, an honest
+# all-rounder, an honest-but-exploitable model, and a spiky one. Edit this list to
+# swap which models the overlay shows (raw model ids as in metrics_v2.csv); any id
+# not in the run is silently skipped.
+RADAR_OVERLAY_MODELS = (
+    "claude-haiku-4-5",            # best rollup; weak honesty
+    "Qwen3.6 27B",                 # most steerable, honest-ish, balanced
+    "moonshotai/Kimi-K2.7-Code",   # elite pushback + scope, low honesty
+    "zai-org/GLM-5.2",             # high honesty, strong all-round
+    "Seed-OSS-36B-Instruct",       # highest honesty but pressure-fragile
+    "x-ai/grok-4.3",               # spiky: top pushback/steerability, weak elsewhere
+)
+
 FLOOR_TARGET_N = 50   # power gate: floor-defining cells need n≥50 (spec §5/§6)
 
 
@@ -373,6 +387,43 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
     # shape differences (who is weak where) visible.
     N = len(AXES)
     ang = [n / N * 2 * np.pi for n in range(N)] + [0.0]
+
+    # 3a. curated OVERLAY radar: a handful of contrasting models on one hexagon.
+    # Each spoke is min-max normalized across the shown models (raw values cluster
+    # near the ceiling on four axes and the floor on steerability), with the real
+    # [min, max] printed on each axis so the absolute scale is not lost.
+    overlay = [m for m in RADAR_OVERLAY_MODELS if m in profiles
+               and m != "_meta" and profiles[m].get("axes")]
+    if overlay:
+        omin = {a: min(profiles[m]["axes"][a] or 0.0 for m in overlay) for a in AXES}
+        omax = {a: max(profiles[m]["axes"][a] or 0.0 for m in overlay) for a in AXES}
+
+        def _onorm(m, a):
+            lo, hi = omin[a], omax[a]
+            return ((profiles[m]["axes"][a] or 0.0) - lo) / (hi - lo) if hi > lo else 0.5
+
+        # explicit high-contrast palette (NOT the global first-seen map, which can
+        # hand two overlaid models near-identical hues); index by position.
+        ocolors = [FS.BLUE, FS.ORANGE, FS.GREEN, FS.PURPLE, FS.RED, FS.GOLD,
+                   FS.PINK, FS.TEAL]
+        fig = plt.figure(figsize=(8.5, 8.5))
+        ax = fig.add_subplot(111, polar=True)
+        for i, m in enumerate(overlay):
+            vals = [_onorm(m, a) for a in AXES]
+            vals += vals[:1]
+            col = ocolors[i % len(ocolors)]
+            ax.plot(ang, vals, "-", color=col, lw=2.4, label=FS.short(m))
+            ax.fill(ang, vals, color=col, alpha=0.07)
+        ax.set_xticks(ang[:-1])
+        ax.set_xticklabels(
+            [f"{FS.AXIS_LABEL[a].replace(chr(10), ' ')}\n[{omin[a]:.2f}-{omax[a]:.2f}]"
+             for a in AXES], fontsize=12)
+        ax.set_ylim(0, 1)
+        ax.set_yticks([0.0, 0.5, 1.0])
+        ax.set_yticklabels(["axis min", "", "axis max"], fontsize=10, color=FS.MUTED)
+        ax.legend(loc="upper right", bbox_to_anchor=(1.36, 1.13), frameon=False)
+        save(fig, "radar_overlay.png")
+
     sm_models = sorted(panel, key=score, reverse=True)
     if sm_models:
         amin = {a: min(profiles[m]["axes"][a] or 0.0 for m in sm_models)
