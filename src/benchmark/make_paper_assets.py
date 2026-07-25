@@ -184,10 +184,10 @@ def fnum(row: dict, key: str) -> float:
 
 def display(model: str) -> str:
     name = FS.DISPLAY_NAME.get(model, model.split("/")[-1])
-    tag = "C" if FS.is_closed(model) else "O"
     # LaTeX-escape the few names that need it (none currently, but be safe)
     name = name.replace("&", r"\&").replace("_", r"\_")
-    return f"\\texttt{{{name}}} ({tag})"
+    cell = f"\\texttt{{{name}}}"  # closed-source models are underlined in the leaderboard
+    return f"\\underline{{{cell}}}" if FS.is_closed(model) else cell
 
 
 def _rdylgn(t: float) -> str:
