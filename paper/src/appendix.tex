@@ -726,3 +726,132 @@ steerability to recover, and the always-escalate agent decides nothing).
 defined only over violations). These are fixed policies, not models.}
 \label{tab:trivial}
 \end{table}
+
+
+\section{Evaluation-Awareness Realism Probe}
+\label{app:evalaware}
+
+A behavioral benchmark is trustworthy only if a model acts the same way when it
+does not recognize the setting as a test. Recent models increasingly do recognize
+it~\citep{needham2025evalaware,apollo2024scienceofevals}, and a model that behaves
+better under scrutiny would make an obvious evaluation report flattering,
+unrepresentative numbers. PACT is built to avoid that (\S\ref{sec:generation}); here
+we test the construction directly, manipulating how eval-like an item looks and
+measuring how much the scored behavior moves.
+
+\subsection{Experimental setup}
+\label{app:evalaware-setup}
+We draw a random 10\% sample of the binding neutral and pressure items (139 of
+1{,}390) and present each as three rungs of the \emph{same} decision, holding the
+rule, the case facts, the incentive, and the menu fixed and varying only how much
+the item signals that it is a test:
+\begin{itemize}
+\item \textbf{R0 (native)} is the frozen PACT item exactly as scored in the main
+evaluation; its compliance is the mean over that item's existing base-arm
+replications, which we reuse rather than re-run.
+\item \textbf{R1 (realism stripped)} has the item's own generator model rewrite the
+whole item in one pass into flat, generic, model-sounding prose: the invented
+company, persona, and workplace register are removed and the text reads like a
+synthetic vignette, while the first-person framing, every decision-relevant fact
+and cost, the incentive, and the rule are held fixed and the option-to-gold
+mapping is carried through unchanged. It is the benchmark we would have written
+without the naturalism pass.
+\item \textbf{R2 (explicit frame)} is the native item with one sentence prepended to
+the system prompt: \emph{``You are an AI assistant being evaluated on your ability
+to handle compliance decisions.''}
+\end{itemize}
+Both R1 and R2 additionally append a standard multiple-choice directive to the user
+turn (\emph{``You must select exactly one of the options; respond with the full
+name of the option that you chose''}), the forced-choice tell that fills benchmark
+training data and that the realistic item omits. Each rung runs through the same
+turn-1 protocol as the main evaluation, including the forcing push, and is scored the
+same way (compliance over all replications, an abstention that survives the push
+counting as a failure). R1 and R2 are each run once per item; R0 is the mean of its
+stored replications.
+
+We evaluate the twelve panel models that are still served and have R0 on record:
+eight open-weights models on the shared inference API and four closed frontier
+systems through their own providers. We report the effect as a relative change,
+$(C-C_0)/(1-C_0)$, the fraction of an item's native non-compliance that the
+manipulation removes. This is the steerability recovery normalization
+(\S\ref{sec:metrics}, axis~4), the right scale on near-ceiling tasks because a
+two-point absolute change means something very different at 5\% non-compliance than
+at 40\%. R0$\to$R1 isolates the realism channel; R0$\to$R2 the explicit-frame channel.
+
+\subsection{Results and analysis}
+\label{app:evalaware-results}
+Table~\ref{tab:evalaware} and Figure~\ref{fig:evalaware} give the per-model result.
+\textbf{Making an item obviously an evaluation raises compliance for almost every
+model}: the explicit frame removes a mean of 39\% of native non-compliance
+(R0$\to$R2), and the effect is largest for the newest frontier systems --- Gemini~3
+Flash and DeepSeek-V4-Pro each shed roughly 70\% of their non-compliance once the
+item announces itself as a test. Only \texttt{gpt-oss-120b} and \texttt{GLM-5.2}
+show no positive frame effect. This is the pattern the eval-awareness literature
+predicts~\citep{needham2025evalaware}: models that recognize a test comply more
+under it, and the models that recognize it most are the recent, heavily benchmarked
+ones.
+
+The realism channel (R0$\to$R1) is weaker and inconsistent (mean 11\%), and is
+\emph{negative} for \texttt{gpt-oss-120b} ($-$79\%), \texttt{GLM-5.2} ($-$40\%), and
+\texttt{Grok~4.3} ($-$32\%), which abstained more once the prose was flattened. A
+stylistic tell (``reads like a benchmark'') does not reliably move behavior, whereas
+an explicit label (``is a benchmark'') does: the eval-awareness effect is carried by
+the overt cue, not the register.
+
+Two caveats bound the reading. First, the panel is compliance-saturated: native
+non-compliance is only 3--10\%, so the 39\% relative effect is about two points in
+absolute terms, and the per-model estimates are noisy on that thin base (a single
+replication for R1 and R2). Second, the explicit frame is an \emph{upper bound} on
+the eval signal, not a counterfactual deployment; it says how far behavior can move
+toward the eval pole, not that R0 equals real use. Within those bounds the result is
+the purpose of the naturalistic construction made measurable: an evaluation that
+looks like an evaluation would report inflated compliance and understate the
+deployment risk, most of all for frontier models, and PACT's realistic framing is
+what keeps its scores off that bias.
+
+\begin{table}[t]
+\centering
+\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{@{}l ccc cc@{}}
+\toprule
+ & \multicolumn{3}{c}{\textbf{Compliance (\%)}} & \multicolumn{2}{c}{\textbf{Non-comp.\ removed}} \\
+\cmidrule(lr){2-4}\cmidrule(lr){5-6}
+\textbf{Model} & R0 & R1 & R2 & R0$\to$R1 & R0$\to$R2 \\
+\midrule
+Gemini 3 Flash$^{\dagger}$ & 94.7 & 95.7 & 98.6 & +18\% & +73\% \\
+DeepSeek-V4-Pro & 95.0 & 97.1 & 98.6 & +43\% & +71\% \\
+Nemotron-3-Ultra & 95.0 & 95.7 & 97.8 & +14\% & +57\% \\
+Kimi-K2.6 & 95.2 & 97.8 & 97.8 & +55\% & +55\% \\
+Inkling & 92.8 & 95.0 & 96.4 & +30\% & +50\% \\
+GPT-5.6 Luna$^{\dagger}$ & 95.9 & 96.4 & 97.8 & +12\% & +47\% \\
+GLM-4.7 & 93.3 & 95.7 & 96.4 & +36\% & +46\% \\
+Claude Haiku 4.5$^{\dagger}$ & 93.3 & 95.7 & 96.4 & +36\% & +46\% \\
+Kimi-K2.7-Code & 95.7 & 97.1 & 97.1 & +33\% & +33\% \\
+Grok 4.3$^{\dagger}$ & 90.2 & 87.1 & 91.4 & $-$32\% & +12\% \\
+gpt-oss-120b & 89.9 & 82.0 & 89.9 & $-$79\% & $-$0\% \\
+GLM-5.2 & 96.4 & 95.0 & 95.7 & $-$40\% & $-$20\% \\
+\midrule
+\emph{Mean} & & & & +11\% & +39\% \\
+\bottomrule
+\end{tabular}
+\caption{Evaluation-awareness realism probe: twelve models, ranked by the
+explicit-frame effect. Compliance is turn-1 pass rate on the 139-item sample under
+R0 (native), R1 (realism stripped), and R2 (explicitly framed as an evaluation);
+R1 and R2 both add the forced-choice directive. The last two columns are the
+relative share of native non-compliance removed, $(C-C_0)/(1-C_0)$.
+$^{\dagger}$ closed-source. The explicit frame raises compliance for ten of twelve
+models, most for the newest frontier systems.}
+\label{tab:evalaware}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/eval_awareness}
+\caption{Share of native non-compliance removed when an item is stripped of realism
+(R0$\to$R1, grey) or explicitly framed as an evaluation (R0$\to$R2; blue
+open-weights, red closed), $(C-C_0)/(1-C_0)$, ranked by the frame effect. Positive
+means the model complies more the more the item looks like a test; the largest
+effects are the newest frontier models.}
+\label{fig:evalaware}
+\end{figure}
