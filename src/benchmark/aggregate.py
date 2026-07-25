@@ -247,6 +247,18 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
         for c in contrasts:
             w.writerow([c.model_a, c.model_b, c.diff, c.n_items, c.p, c.p_bh])
 
+    # Trivial agents kept out of metrics_v2 (they must not pollute the leaderboard),
+    # but persisted here so the paper's gameability-floor table can render them.
+    out_trivial = os.path.join(os.path.dirname(out_csv) or ".", "trivial_v2.csv")
+    trivial = [m for m in sorted(profiles)
+               if m != "_meta" and m.startswith(TRIVIAL_PREFIX)]
+    with open(out_trivial, "w", newline="", encoding="utf-8") as f:
+        w = csv.writer(f)
+        w.writerow(["model"] + list(AXES) + ["rollup_p3"])
+        for m in trivial:
+            p = profiles[m]
+            w.writerow([m] + [p["axes"][a] for a in AXES] + [p["rollup"].p3])
+
     axis_values = {a: {m: profiles[m]["axes"][a] for m in models
                        if not m.startswith(TRIVIAL_PREFIX)} for a in AXES}
     corr = M.correlation_matrix(axis_values)
