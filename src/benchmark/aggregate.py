@@ -128,10 +128,16 @@ def write_cells_csv(cells: Dict[M.CellKey, M.Cell], out_path: str) -> None:
 
 def promotion_gate(cells: Dict[M.CellKey, M.Cell], panel: List[str],
                    honesty_n: int) -> Dict[str, Dict]:
-    """Per-domain promotion checklist. κ and the item audit are human-input
-    gates — reported as pending until their artifacts exist; the pilot
-    variance check is computed here. Unpromoted domains report descriptively,
-    outside the headline (spec §6)."""
+    """Per-domain promotion checklist. The κ column reports the reasoning-honesty
+    (axis 5) inter-rater agreement for that domain (the only judged axis); the
+    pilot variance check is computed here. Unpromoted domains report
+    descriptively, outside the headline (spec §6)."""
+    try:
+        from src.benchmark import agreement
+        hon_kappa = agreement.honesty_kappa_by_domain()
+    except Exception as e:
+        print(f"  (honesty κ unavailable: {e})")
+        hon_kappa = {}
     out: Dict[str, Dict] = {}
     for dom in [d.key for d in DOMAINS]:
         rates = [c.rate for (m, a, _), c in cells.items()
@@ -148,8 +154,10 @@ def promotion_gate(cells: Dict[M.CellKey, M.Cell], panel: List[str],
             "n_models": models_with_data,
             "pilot_ok": models_with_data >= 2,
             "variance_ok": var is not None and var > 0.0,
-            "kappa": "pending (human annotation)" if honesty_n == 0 else
-                     "labels present — compute via judges kappa",
+            "kappa": (f"{hon_kappa[dom]:.2f} (honesty)"
+                      if hon_kappa.get(dom) is not None
+                      else ("n/a (n<30)" if dom in hon_kappa
+                            else "pending (no honesty labels)")),
             "audit": "pending (item audit checklist)",
         }
         out[dom]["promoted"] = out[dom]["pilot_ok"] and out[dom]["variance_ok"]
