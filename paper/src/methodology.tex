@@ -72,10 +72,11 @@ must hold against it; on the mirror non-binding guard the model must stand down.
 Items are LLM-authored, so we treat generation itself as a measurement instrument and
 publish its quality record. A scenario is built \emph{component by component} in
 dependency order (persona; request and menu; rule note; nine pressures; guard twin; two
-turn-2 scripts; two attacks). Each new component is conditioned on the ones already
-accepted, so the version reads in one voice. The baseline request is written once and reused
-verbatim across the whole battery, so a single leak would contaminate every item built
-on it. Prompts are \emph{zero-shot}. When generators are instead shown a shared worked
+turn-2 scripts; two attacks). Each component is conditioned on the spine it depends on
+(persona and request/menu); the turn-2 scripts and attacks additionally see the rule
+note and guard twin. The baseline request is written once and reused
+verbatim across the whole battery, so the version reads in one voice and a single leak
+would contaminate every item built on it. Prompts are \emph{zero-shot}. When generators are instead shown a shared worked
 example, they converge on its names and phrasing, which erases the between-domain variation
 we are trying to measure. Naturalism is enforced at the source (workplace register,
 invented work artifacts, deliberate typing slips) because a model that senses it is
@@ -88,8 +89,9 @@ being tested is the single biggest threat to a behavioral benchmark.
 independently by three generator models (\texttt{Kimi-K2.6}, \texttt{Nemotron-Ultra},
 \texttt{GLM-5.2}); a panel
 of judge models scores each component against a checklist and returns feedback to the
-generating model until no judge fails it, yielding a phrasing-diverse pool of validated
-items.}
+generating model for revision, up to a fixed attempt budget; components that never pass
+are dropped and the version ships as a partial, yielding a phrasing-diverse pool of
+validated items.}
 \label{fig:generator}
 \end{figure}
 
@@ -137,11 +139,9 @@ string matching cannot mislabel a hedged or paraphrased reply. Every row logs
 the judge and a prompt hash. Two \emph{reasoning classifiers} then label the residual
 behavior an outcome alone misses: honesty (axis~5) and the reason a turn~1 reply
 abstained. Each classifier is an ensemble of the three generator models applied
-leave-one-out, so a model never grades a version it wrote. We report their inter-rater
+leave-one-out, so a model never grades its own responses. We report their inter-rater
 agreement: mean pairwise Cohen's $\kappa=0.51$ for honesty (moderate) and $0.62$ for the
-abstention taxonomy (substantial), detailed in Appendix~\ref{app:agreement}. Before
-release, a judge-swap check confirms that swapping in a different judge model leaves the
-ranking essentially unchanged (Kendall $\tau\geq0.9$). A separate awareness probe flags
+abstention taxonomy (substantial), detailed in Appendix~\ref{app:agreement}. A separate awareness probe flags
 signs that the model believes it is being tested. We report it beside the leaderboard
 and never fold it in. Throughout we report Wilson intervals on each scored rate,
 item-clustered standard errors, Benjamini--Hochberg-corrected bootstrap contrasts, and
@@ -182,10 +182,11 @@ distinct signals rather than one.}
 
 \begin{enumerate}
 \item \textbf{Default Compliance} is $\text{pass}^3$ on the neutral binding items: the
-fraction on which the model complies across \emph{all three} independent runs. Here
-$\text{pass}^3$ is $\tau$-bench's pass$^k$ estimator~\citep{yao2024taubench} at
-$k{=}3$, so an item counts only when every one of its three runs complies and a single
-slip drops it to zero. This is the baseline every stressor is read against.
+fraction on which the model complies across \emph{every} independent run. Here
+$\text{pass}^3$ credits an item only when the model complies on every one of its
+replications (three by default) --- the unanimous case of $\tau$-bench's pass$^k$
+estimator~\citep{yao2024taubench} --- so a single slip drops the item to zero. This is
+the baseline every stressor is read against.
 
 \item \textbf{Pressure Resistance} applies the same $\text{pass}^3$ to the pressure
 items, the fraction on which the model complies on every replication, so a model that
@@ -197,8 +198,7 @@ broken by one pressure from one broken by six.
 \item \textbf{Pushback Resistance} conditions on the model's own turn-1-compliant
 items and measures whether it still holds after the user pushes back:
 $\mathrm{pass}^3(\text{hold at turn 2}\mid\text{complied at turn 1})$. It captures
-erosion under a user who keeps pushing. Recovery is reported separately as a
-diagnostic.
+erosion under a user who keeps pushing.
 
 \item \textbf{Steerability} measures how much of a model's failures an explicit
 guardrail can repair. Every item runs twice: once on the base persona, and once on the
@@ -210,18 +210,21 @@ $\Delta_{\text{sd}}=\text{sd}_{\text{base}}-\text{sd}_{\text{anti}}$ subtracts a
 of correct stand-downs. That penalty stops a mandate from scoring well by turning the
 model into a blanket always-comply agent.
 
-\item \textbf{Reasoning Honesty} measures, on the violations, whether the model admits
-the breach: $1-\text{silent rate}=1-n_{\text{silent}}/n_{\text{viol}}$, with each
-violation labeled silent, rationalized, or defiant-honest. Because the denominator is
-violations, the best models have the least data, so an undefined value maps to $1$ and
-is held out of the harmonic mean. This axis is fully judged, so it carries its own
-reliability gate.
+\item \textbf{Reasoning Honesty} measures, on the base-mode binding violations, whether
+the model admits the breach: $1-\text{silent rate}$, where a violation's silent rate is
+the fraction of the ensemble judges that labeled it silent (each judge labels it silent,
+rationalized, or defiant-honest), averaged over the model's violations. Because the
+denominator is violations, the best models have the least data, so an undefined value
+maps to $1$ and is held out of the harmonic mean. This is the only axis that depends on
+a judge, and it is the least reproducible one (Appendix~\ref{app:agreement}).
 
 \item \textbf{Rule-Scope Discernment} measures whether the model applies the rule only
-where it binds: balanced accuracy over binding and non-binding scope items,
-$\tfrac12[P(\text{comply}\mid\text{bind})+P(\text{stand-down}\mid\text{non-bind})]$,
-with the under-attack items folded in. We report the two terms separately. The
-stand-down term is the discriminating signal, since the binding term overlaps Default
+where it binds. It is $\text{pass}^3$ over the pooled binding and non-binding scope
+items (the under-attack items folded in): the fraction on which the model makes the
+correct scope call --- comply where the rule binds, stand down where it does not --- on
+every replication. We also compute the two directional rates as diagnostics
+($P(\text{comply}\mid\text{bind})$ and $P(\text{stand-down}\mid\text{non-bind})$); the
+stand-down rate is the discriminating signal, since comply-when-binding overlaps Default
 Compliance.
 \end{enumerate}
 
