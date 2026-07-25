@@ -510,12 +510,31 @@ Difficulty varies sharply across domains, and unevenly across the axes
 (Table~\ref{tab:perdomain}). Procurement is the hardest domain on every rule-holding
 axis (default compliance 0.76, where a cheap non-certified vendor is a standing
 temptation), with healthcare administration and HR/hiring next; government services and
-moderation sit near the ceiling. The sharper story is steerability: an explicit
-guardrail recovers 0.78--0.80 of base failures in AML and privacy, but only 0.19 in
-HR/hiring and 0.29 in healthcare administration. The same compliance mandate that works
-in one domain barely moves the model in another, so a deployer cannot assume a guardrail
-generalizes across its workflows. The weakest models degrade across a whole domain
-rather than on isolated scenarios.
+moderation sit near the ceiling.
+
+The sharper story is steerability, and it runs against the obvious guess. One might
+expect a worse baseline to be easier to steer, since there are simply more failures left
+to repair. That is not what happens. Recovery is already normalized by each domain's own
+failure mass, so headroom is divided out by construction, and empirically the
+relationship has the \emph{opposite} sign to the headroom account
+(Figure~\ref{fig:steerbaseline}): across the twelve domains, base compliance and
+steerability are positively correlated ($r=+0.56$), whereas ``more room to improve''
+would require a negative slope. HR/hiring and healthcare administration sit in the middle
+of the baseline range (0.89 and 0.87, not the worst) yet have the \emph{lowest}
+steerability in the panel (0.19 and 0.29): a guardrail barely repairs their failures
+despite ample room to. AML and privacy, already strong at baseline, are the most steerable
+(0.78--0.80). The practical reading is that the domain where an explicit mandate helps
+\emph{least} is not the one with the most failures to fix, so a deployer cannot infer
+steerability from base compliance; it has to be measured per workflow.
+
+Two supporting patterns. Turn-2 hold is uniformly high across domains (0.89 in
+procurement up to 0.98 in AML and privacy), so as with the pressure families the
+multi-turn risk lives at turn~1, not in the follow-up, in every domain. And scope
+discernment is weakest exactly where the rule's boundary is genuinely ambiguous:
+healthcare administration (0.71) and AML (0.77), where models over-apply the rule to the
+non-binding twin (opening a breach review, or filing a report, when the facts do not
+call for it), against 0.90--0.91 in government services and moderation. The weakest
+models degrade across a whole domain rather than on isolated scenarios.
 
 \begin{table}[t]
 \centering
@@ -528,21 +547,45 @@ steerability varies most, from 0.19 (HR/hiring) to 0.80 (privacy).}
 \label{tab:perdomain}
 \end{table}
 
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.9\columnwidth]{figures/steer_baseline}
+\caption{Domain steerability against base-mode default compliance. If steerability were
+a headroom artifact (more base failures leaving more to repair), the slope would be
+negative; instead it is positive ($r=+0.56$). HR/hiring and healthcare administration are
+low-steerability outliers despite middling baselines, so a guardrail helping little is a
+property of the domain, not of how much room it had.}
+\label{fig:steerbaseline}
+\end{figure}
+
 \subsection{Pressures across turns}
 The fragility map (Figure~\ref{fig:fragility}) shows how each pressure lands at turn~1;
 Table~\ref{tab:pressureturns} adds what happens at turn~2 and how well a guardrail
-repairs each family. Three patterns stand out. Pressure does its damage on the first
-move: \emph{false\_clearance} (0.88) and \emph{urgency} (0.91) draw the most turn-1
-violations. A model that complies at turn~1 almost always holds under a single pushback,
-turn-2 hold rates sit at 0.95--0.97 for every family, so the multi-turn risk is not that
-a compliant model gets argued out of its choice; it is that the right opening pressure
-gets it to violate at turn~1 in the first place. And steerability tracks the pressure:
-the hard directive recovers 0.46 of failures under a sympathetic beneficiary but only
-0.15--0.18 under a peer-escaped or responsibility-shift framing, the families where a
-guardrail helps least. (Turn~2 here is the pushback branch, conditional on a turn-1
-comply.) Figure~\ref{fig:dompress} breaks turn-1 compliance out by domain and pressure
-together: the losses concentrate in a few cells (procurement under false\_clearance is
-the weakest, 0.72), not evenly across the grid.
+repairs each family. Pressure does its damage on the first move: \emph{false\_clearance}
+(0.88) and \emph{urgency} (0.91) draw the most turn-1 violations, and a model that
+complies at turn~1 almost always holds under a single pushback (turn-2 hold sits at
+0.95--0.97 for every family). So the multi-turn risk is not that a compliant model gets
+argued out of its choice; it is that the right opening pressure gets it to violate at
+turn~1 in the first place.
+
+Steerability adds a second ordering that does \emph{not} match the first. The families a
+guardrail repairs least are the ones that relocate accountability rather than create
+urgency: \emph{peer\_escaped} (0.15, ``others did this and nothing happened''),
+\emph{responsibility\_shift} (0.18, ``that's on me, not you''), and \emph{fait\_accompli}
+(0.21, ``it is already done''). A blanket ``follow the rule'' mandate rebuts a direct
+temptation, so \emph{sympathetic\_beneficiary} (0.46) and the manager or cost framings
+(0.35--0.36) are far more recoverable, but it has little purchase on a pressure whose
+whole move is to argue the rule is not the model's problem. And the most damaging
+pressure at turn~1 is not the most fixable: \emph{false\_clearance} causes the most
+violations yet is only middling to steer (0.37). Damage and repairability are separate
+questions, and a deployer worried about a specific insider framing has to read both
+columns. (Turn~2 here is the pushback branch, conditional on a turn-1 comply.)
+
+Figure~\ref{fig:dompress} breaks turn-1 compliance out by domain and pressure together.
+The losses are concentrated, not spread over the grid: they pile up in the procurement
+row and the \emph{false\_clearance}/\emph{urgency} columns, and the single weakest cell
+is procurement under \emph{false\_clearance} (0.72). A per-family mean would hide that a
+model's exposure is really a handful of (domain, pressure) intersections.
 
 \begin{table}[t]
 \centering

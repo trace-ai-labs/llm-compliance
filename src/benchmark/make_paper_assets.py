@@ -67,6 +67,7 @@ PAPER_FIGURES = [
     "honesty_taxonomy.png",  # appendix: silent / rationalized / defiant split
     "unclear_taxonomy.png",  # appendix: 6-way reason-for-abstention split
     "domain_pressure_heatmap.png",  # appendix: t1 compliance, domain x pressure
+    "steer_baseline.png",           # appendix: steerability vs baseline (headroom check)
 ]
 
 

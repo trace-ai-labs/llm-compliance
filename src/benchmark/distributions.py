@@ -160,18 +160,58 @@ def plot_domain_pressure(domains, fams, grid, path: str) -> None:
     plt.close(fig)
 
 
+def _pearson(a: Sequence[float], b: Sequence[float]) -> float:
+    n = len(a)
+    ma, mb = sum(a) / n, sum(b) / n
+    cov = sum((x - ma) * (y - mb) for x, y in zip(a, b))
+    sa = (sum((x - ma) ** 2 for x in a)) ** 0.5
+    sb = (sum((y - mb) ** 2 for y in b)) ** 0.5
+    return cov / (sa * sb) if sa and sb else 0.0
+
+
+def plot_steer_baseline(da: Dict[str, Dict[str, Optional[float]]], path: str) -> None:
+    """Scatter of domain baseline compliance vs steerability. Preempts the
+    'more room -> higher recovery' confound: if headroom drove steerability the
+    slope would be negative; it is not."""
+    import matplotlib.pyplot as plt
+    FS.use_paper_style()
+    doms = [d for d in da if da[d]["default_compliance"] is not None
+            and da[d]["steerability"] is not None]
+    x = [da[d]["default_compliance"] for d in doms]
+    y = [da[d]["steerability"] for d in doms]
+    r = _pearson(x, y)
+    fig, ax = plt.subplots(figsize=(6.4, 5.0))
+    ax.scatter(x, y, s=42, color=FS.BLUE, zorder=3)
+    for d, xi, yi in zip(doms, x, y):
+        ax.annotate(short_domain(d), (xi, yi), fontsize=8,
+                    xytext=(4, 3), textcoords="offset points")
+    ax.set_xlabel("Base-mode default compliance (panel mean)")
+    ax.set_ylabel("Steerability (recovery)")
+    ax.set_title(f"Steerability does not rise with headroom (r={r:+.2f})")
+    ax.grid(True, alpha=0.3)
+    fig.savefig(path, bbox_inches="tight")
+    fig.savefig(path[:-4] + ".pdf", bbox_inches="tight")
+    plt.close(fig)
+
+
 def main() -> None:
     trials = load_trials(TRIALS_DIR)
     cells = M.build_cells(trials)
     models = sorted({m for (m, _, _) in cells if not m.startswith("trivial:")})
     os.makedirs(FIG_DIR, exist_ok=True)
 
-    # 1. domain x axis
+    # 1. domain x axis (+ raw turn-2 pushback hold per domain, for the prose)
     da = domain_axis_table(cells, models)
     axis_names = [n for n, _ in AXES]
+    t2_by_domain = {
+        dom: _pooled_rate([c for (m, a, _), c in cells.items()
+                           if a == "base" and c.domain == dom and m in models],
+                          "t2_pushback")
+        for dom in da}
     _write_csv(os.path.join(OUT_DIR, "dist_domain_axis.csv"),
-               ["domain"] + axis_names,
-               [[dom] + [da[dom][a] for a in axis_names] for dom in da])
+               ["domain"] + axis_names + ["turn2_hold"],
+               [[dom] + [da[dom][a] for a in axis_names] + [t2_by_domain[dom]]
+                for dom in da])
 
     # 2. pressure family x {t1, t2, steer}
     pt = pressure_table(cells, models)
@@ -184,6 +224,13 @@ def main() -> None:
     domains, fams, grid = domain_pressure_grid(cells, models)
     plot_domain_pressure(domains, fams, grid,
                          os.path.join(FIG_DIR, "domain_pressure_heatmap.png"))
+
+    # 4. steerability vs baseline scatter (refutes the headroom confound)
+    plot_steer_baseline(da, os.path.join(FIG_DIR, "steer_baseline.png"))
+    dd = [da[d]["default_compliance"] for d in da]
+    ss = [da[d]["steerability"] for d in da]
+    print(f"\n  r(domain default, steerability) = {_pearson(dd, ss):+.2f}  "
+          f"(headroom would predict a negative slope)")
 
     # headline findings for the prose
     print("\n== domain x axis (panel mean) ==")
