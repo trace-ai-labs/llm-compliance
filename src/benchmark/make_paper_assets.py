@@ -159,7 +159,7 @@ def build_model_table(rows: List[dict]) -> str:
         name = FS.DISPLAY_NAME.get(m, m.split("/")[-1]).replace("&", r"\&")
         prov = meta["provider"].replace("&", r"\&")
         note = meta["note"].replace("&", r"\&")
-        lines.append(f"{name} & {meta['params']} & {meta['rel']} & "
+        lines.append(f"\\texttt{{{name}}} & {meta['params']} & {meta['rel']} & "
                      f"{prov}; {note}~\\citep{{{meta['cite']}}} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
     return "\n".join(lines)
@@ -180,7 +180,7 @@ def display(model: str) -> str:
     tag = "C" if FS.is_closed(model) else "O"
     # LaTeX-escape the few names that need it (none currently, but be safe)
     name = name.replace("&", r"\&").replace("_", r"\_")
-    return f"{name} ({tag})"
+    return f"\\texttt{{{name}}} ({tag})"
 
 
 def _rdylgn(t: float) -> str:
@@ -219,9 +219,11 @@ def build_table(rows: List[dict]) -> str:
         "% relative standing on that axis; color is NOT comparable across columns.",
         r"\begin{tabular}{l cccccc c}",
         r"\toprule",
-        (r"\textbf{Model} & \textbf{Default} & \textbf{Pressure} & "
-         r"\textbf{Pushback} & \textbf{Steer.} & \textbf{Honesty} & "
-         r"\textbf{Scope} & \textbf{Rollup} \\"),
+        (r"\textbf{Model} & \shortstack{\textbf{Default}\\\textbf{Compliance}} & "
+         r"\shortstack{\textbf{Pressure}\\\textbf{Resistance}} & "
+         r"\shortstack{\textbf{Pushback}\\\textbf{Resistance}} & \textbf{Steerability} & "
+         r"\shortstack{\textbf{Reasoning}\\\textbf{Honesty}} & "
+         r"\shortstack{\textbf{Rule-Scope}\\\textbf{Discernment}} & \textbf{Rollup} \\"),
         r"\midrule",
     ]
     for r in rows:
@@ -258,12 +260,18 @@ def copy_figures() -> List[str]:
     os.makedirs(FIGURES_DIR, exist_ok=True)
     copied = []
     for name in PAPER_FIGURES:
-        src = os.path.join(FIG_SRC, name)
-        if os.path.exists(src):
-            shutil.copyfile(src, os.path.join(FIGURES_DIR, name))
-            copied.append(name)
-        else:
-            print(f"  [!] missing figure {src} - run `aggregate --figures` first")
+        # Ship the PDF (vector) when aggregate has produced one, and the PNG too;
+        # the paper includes these extensionless and pdflatex prefers the PDF.
+        variants = [name[:-4] + ".pdf", name] if name.endswith(".png") else [name]
+        found = False
+        for cand in variants:
+            src = os.path.join(FIG_SRC, cand)
+            if os.path.exists(src):
+                shutil.copyfile(src, os.path.join(FIGURES_DIR, cand))
+                copied.append(cand)
+                found = True
+        if not found:
+            print(f"  [!] missing figure {name} - run `aggregate --figures` first")
     return copied
 
 

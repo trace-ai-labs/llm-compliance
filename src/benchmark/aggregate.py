@@ -341,7 +341,13 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
     panel = sorted(models, key=score, reverse=True)
 
     def save(fig, name):
-        fig.savefig(os.path.join(out_dir, name)); plt.close(fig)
+        # Emit both a raster PNG (dashboard / HF) and a vector PDF (the paper's
+        # \includegraphics prefers the PDF when present). bbox=tight is set in
+        # figstyle; crop_pdf.py can tighten the PDF further after the fact.
+        fig.savefig(os.path.join(out_dir, name))
+        if name.lower().endswith(".png"):
+            fig.savefig(os.path.join(out_dir, name[:-4] + ".pdf"))
+        plt.close(fig)
 
     # 1. leaderboard: scalar rollup (pass^3) with bootstrap CI
     order = sorted(models, key=score)

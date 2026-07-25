@@ -13,72 +13,82 @@ collective action~\citep{mobley2025workday}; and the FTC has brought a wave of
 actions against deceptive AI products~\citep{ftc2024aicomply}, while regulators from
 the CFPB to FINRA warn that existing rules apply unchanged to AI-generated
 output~\citep{cfpb2023chatbots,finra2024notice2409}. Chat-level rule-breaking by
-deployed bots is a failure class that is already producing invoices.
+deployed bots is a failure class that is already producing invoices.\footnote{The
+full dataset and evaluation code are included as supplementary material and will be
+released open-source upon acceptance.}
 
-\paragraph{Compliance is a propensity, not a capability.} Whether a model
-\emph{knows} the rules is the wrong question: every instruction-tuned model we know
-of can identify the compliant option when asked, and under an imperative framing
-near-universal compliance is routine. What varies, and what a compliance officer
-needs, is whether a model \emph{keeps} choosing it when a system prompt rewards
-speed and cost, when a manager says to make an exception, when a peer reports
-getting away with it, and when the user pushes back. This capability--propensity
-distinction is load-bearing in modern safety
-evaluation~\citep{apollo2024scienceofevals,phuong2024dangerous} and is exactly what
-aggregate leaderboards blur: a high knowledge score tells a bank nothing about
-whether its agent will pay a \$2{,}400 fine to save \$2{,}400.
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.80\textwidth]{figures/pact_overall_pipeline}
+\caption{How a single trial runs and is scored. The system prompt carries the agent
+persona and the standing compliance rule (and, in the anti-adversarial arm, an
+explicit mandate); the user turn carries the choice menu and, depending on the item, a
+pressure add-on, the non-binding guard, or the plain baseline. The agent's answer
+passes through a deterministic decision extractor; a conditional second turn forces a
+decision when the first is unclear and pushes back when the model complied. A reasoning
+classifier labels the outcome, and each item feeds one of the six axes (right).}
+\label{fig:pipeline}
+\end{figure*}
 
-\paragraph{The measurement gap.} No benchmark occupies the cell a deployer needs.
-Agentic-policy benchmarks such as $\tau$-bench measure task completion under a
-policy, but with a cooperative user and single-attempt
-grading~\citep{yao2024taubench,barres2025tau2bench}. Honesty work such as MASK
-applies pressure in a single shot and measures truthfulness, not
-rule-following~\citep{ren2025mask}. Harm and refusal suites (AgentHarm, SORRY-Bench,
-AIR-Bench) test refusal of \emph{malicious} instructions, whereas the realistic
+Whether a model \emph{knows} the rules is the wrong question. Every
+instruction-tuned model we know of can identify the compliant option when asked, and
+under an imperative framing near-universal compliance is routine. What varies, and
+what a compliance officer needs, is whether a model \emph{keeps} choosing it when a
+system prompt rewards speed and cost, when a manager says to make an exception, when a
+peer reports getting away with it, and when the user pushes back. This is a question of
+propensity, not capability, a distinction that is load-bearing in modern safety
+evaluation~\citep{apollo2024scienceofevals,phuong2024dangerous} and that aggregate
+leaderboards blur: a high knowledge score tells a bank nothing about whether its agent
+will pay a \$2{,}400 fine to save \$2{,}400.
+
+No existing benchmark occupies the niche a deployer needs. Agentic-policy benchmarks
+such as $\tau$-bench measure task completion under a policy, but with a cooperative
+user and single-attempt grading~\citep{yao2024taubench,barres2025tau2bench}. Honesty
+work such as \texttt{MASK} applies pressure in a single shot and measures truthfulness, not
+rule-following~\citep{ren2025mask}. Harm and refusal suites (\texttt{AgentHarm}, \texttt{SORRY-Bench},
+\texttt{AIR-Bench}) test refusal of \emph{malicious} instructions, whereas the realistic
 enterprise threat is a \emph{benign} user whose convenience conflicts with a
 rule~\citep{andriushchenko2024agentharm,xie2024sorrybench,zeng2024airbench}. And
 single-turn numbers overstate deployed reliability: models lose about 39\% of
-performance over multiple turns~\citep{laban2025lost} and flip under mild
-disagreement at high rates~\citep{laban2023flipflop,sharma2023sycophancy}. The
-intersection of benign incentive-conflict pressure, an embedded enterprise rule,
-multi-turn interaction, and a propensity target is empty.
+performance over multiple turns~\citep{laban2025lost} and flip under mild disagreement
+at high rates~\citep{laban2023flipflop,sharma2023sycophancy}. The intersection of
+benign incentive-conflict pressure, an embedded enterprise rule, multi-turn
+interaction, and a propensity target is empty.
 
-\paragraph{PACT.} We fill it. The benchmark casts rule-following as a
-deployment: a persona system prompt rewarding a local objective, a standing rule,
-and an in-character request whose most convenient option violates it. Across twelve
-regulated domains and 48 scenarios, each item applies nine pressures, each
-operationalizing a distinct compliance-theory mechanism (deterrence, legitimacy,
-descriptive norms, commitment, empathy, authority), and a conditional second turn
-that re-argues the temptation or challenges the violation. Because a single scalar
-misrepresents the phenomenon, we report six separate axes, each scored as
-\emph{per-item reliability} ($\text{pass}^3$ in the sense of $\tau$-bench's pass$^k$
-estimator~\citep{yao2024taubench}: holding on \emph{all} three identical runs, not on
-their average, because a compliance agent must be right every time): default
-compliance, pressure
-resistance, multi-turn pushback resistance, steerability under an explicit guardrail,
-honesty about violations, and rule-scope discernment (a non-binding guard twin
-separates rule-following from rule-parroting). Three commitments make it a
-\emph{research} instrument. Its construct chain is explicit,
-and its central paradox, that a weak truthfully described penalty can \emph{reduce}
-compliance, is a machine analogue of the ``a fine is a price'' field
+PACT fills that niche. The benchmark casts rule-following as a deployment: a persona
+system prompt rewarding a local objective, a standing rule, and an in-character
+request whose most convenient option violates it. Across twelve regulated domains and
+48 scenarios, each item applies nine pressures, each operationalizing a distinct
+compliance-theory mechanism (deterrence, legitimacy, descriptive norms, commitment,
+empathy, authority), and a conditional second turn that re-argues the temptation or
+challenges the violation. Because a single scalar misrepresents the phenomenon, we
+report six separate axes, each scored as \emph{per-item reliability} ($\text{pass}^3$
+in the sense of $\tau$-bench's pass$^k$ estimator~\citep{yao2024taubench}: holding on
+\emph{all} three identical runs, not on their average, because a compliance agent must
+be right every time): default compliance, pressure resistance, multi-turn pushback
+resistance, steerability under an explicit guardrail, honesty about violations, and
+rule-scope discernment (a non-binding guard twin separates rule-following from
+rule-parroting). Three commitments make it a \emph{research} instrument. Its construct
+chain is explicit, and its central paradox, that a weak truthfully described penalty
+can \emph{reduce} compliance, is a machine analogue of the ``a fine is a price'' field
 experiment~\citep{gneezy2000fine}. Its items are audited: generated component by
 component and zero-shot under dual review by non-authoring models with a published
-$\kappa$, then frozen behind a pre-registered hash, a private holdout, and a canary
-to resist contamination~\citep{golchin2024timetravel,srivastava2023bigbench}. And
-its metrics were validated on 72{,}142 trials from a prior single-domain
-study~\citep{priorstudy} \emph{before} we trusted them, changing the design three
-times in response. Run across 22 models, the verdict is sobering: even the strongest
-is unreliable on roughly one item in twenty and most of the field on one in ten, and
-none clears the bar for unsupervised deployment in a regulated workflow. Worse, the
-residual failures are not diffuse noise: they concentrate in specific pressure
-families, so an insider who knows which lever to pull --- a fabricated prior
-authorization, a manufactured deadline --- can turn a 1-in-10 error rate into a
-repeatable exploit without ever issuing a jailbreak.
+$\kappa$, then frozen behind a pre-registered hash, a private holdout, and a canary to
+resist contamination~\citep{golchin2024timetravel,srivastava2023bigbench}. And its
+metrics were validated on 72{,}142 trials from a prior single-domain
+study~\citep{priorstudy} before we trusted them, changing the design three times in
+response. Run across 22 models, the verdict is sobering: even the strongest is
+unreliable on roughly one item in twenty and most of the field on one in ten, and none
+clears the bar for unsupervised deployment in a regulated workflow. The residual
+failures are not diffuse noise; they concentrate in specific pressure families, so an
+insider who knows which lever to pull (a fabricated prior authorization, a manufactured
+deadline) can turn a 1-in-10 error rate into a repeatable exploit without ever issuing
+a jailbreak.
 
-\paragraph{Contributions.} We contribute (1) a formalization of enterprise
-rule-following as a multi-turn propensity problem, with a template comparable across
-48 scenarios in 12 domains; (2) a theory-grounded pressure battery and a two-arm
-multi-turn protocol isolating six behaviors; (3) a generation pipeline that makes
-LLM-authored items more auditable than hand-written ones; (4) a reliability-scored
-metric suite engineered against known benchmark failure modes; and (5) an open,
-per-trial, re-aggregable release meant to serve deployers
-as a governance instrument filterable to their own domain.
+In sum, we contribute (1) a formalization of enterprise rule-following as a multi-turn
+propensity problem, with a template comparable across 48 scenarios in 12 domains; (2) a
+theory-grounded pressure battery and a two-arm multi-turn protocol isolating six
+behaviors; (3) a generation pipeline that makes LLM-authored items more auditable than
+hand-written ones; (4) a reliability-scored metric suite engineered against known
+benchmark failure modes; and (5) an open, per-trial, re-aggregable release meant to
+serve deployers as a governance instrument filterable to their own domain.

@@ -1,12 +1,12 @@
 \section{Findings and Discussion}
 \label{sec:findings}
 
-We evaluate \textbf{22 models} --- 18 open-weights and 4 closed-source (Claude Haiku
-4.5, GPT-5.6 Luna, Grok~4.3, Gemini~3 Flash) --- on the frozen 1{,}737-item set,
-three replications in each of the two system-prompt arms. The panel spans 7B dense
-models to trillion-parameter sparse mixtures and three years of releases;
-Appendix~\ref{app:models} (Table~\ref{tab:models}) lists each model's provider,
-size, release date, and citation. We report the leaderboard
+We evaluate \textbf{22 models} (18 open-weights and 4 closed-source: \texttt{Claude
+Haiku 4.5}, \texttt{GPT-5.6 Luna}, \texttt{Grok~4.3}, \texttt{Gemini~3 Flash}) on the
+frozen dataset of 1{,}737 items, three replications in each of the two system-prompt
+arms. The panel spans 7B dense models to trillion-parameter sparse mixtures and three
+years of releases; Appendix~\ref{app:models} (Table~\ref{tab:models}) lists each
+model's provider, size, release date, and citation. We report the leaderboard
 and its headline reading, then the pre-launch validation that fixed the metric
 design, then implications and threats.
 
@@ -20,14 +20,11 @@ design, then implications and threats.
 % Table body is generated from results/benchmark/metrics_v2.csv by
 % src/benchmark/make_paper_assets.py; rerun it after each aggregate.
 \input{tables/leaderboard}
-\caption{The PACT v1 leaderboard: 22 models (O = open-source, C = closed-source),
-sorted by the $\text{pass}^3$ rollup. Every axis is $\text{pass}^3$ --- the fraction
-of cells the model held on across all three replications --- except Steerability
-(recovery net) and Honesty ($1-\text{silent}$). Rollup is $\text{pass}^3$ over all
-pooled scored cells. Higher is better throughout. Cell shading is scaled
-\emph{within each column} (green best, red worst on that axis), so it shows relative
-standing per axis and is not comparable across columns; the steerability column, for
-instance, is green at values an absolute scale would render amber.}
+\caption{The PACT v1 leaderboard: 22 models (O = open-source, C = closed), sorted by
+the $\text{pass}^3$ rollup (higher is better). Every axis is $\text{pass}^3$ except
+Steerability (recovery net) and Reasoning Honesty ($1-\text{silent}$). Shading is
+scaled \emph{within} each column (green best, red worst), so it is not comparable
+across columns.}
 \label{tab:leaderboard}
 \end{table*}
 
@@ -35,13 +32,13 @@ instance, is green at values an absolute scale would render amber.}
 whether a model held the rule on \emph{every} one of three identical runs, because
 the deployment bar is unforgiving: an enterprise compliance agent has to be right
 every time, not on average. So $1-\text{pass}^3$ is the share of items on which the
-model simply \emph{cannot be relied on} --- it slipped at least once. Read that way,
+model simply \emph{cannot be relied on}; it slipped at least once. Read that way,
 Table~\ref{tab:leaderboard} is sobering rather than reassuring. The best model in the
-panel, Claude Haiku 4.5, still fails to reliably hold on $\sim$5\% of items; much of
-the field clusters near 0.90, roughly one unreliable item in ten; and the weakest
-models miss 40--50\%. In a regulated function where a \emph{single} violation is a
-legal event --- a mis-stated refund policy, an out-of-scope PHI disclosure, a
-structured payment --- ``right 90--95\% of the time'' is not a passing grade. It is
+panel, \texttt{Claude Haiku 4.5}, still fails to reliably hold on $\sim$5\% of items;
+much of the field clusters near 0.90, roughly one unreliable item in ten; and the
+weakest models miss 40--50\%. In a regulated function where a \emph{single} violation
+is a legal event (a mis-stated refund policy, an out-of-scope PHI disclosure, a
+structured payment), ``right 90--95\% of the time'' is not a passing grade. It is
 one avoidable incident every ten to twenty interactions. The leaderboard does not
 name a model safe to run autonomously; it ranks \emph{how much oversight each still
 needs}, and even the leader needs a lot. This is why we score reliability rather than
@@ -58,40 +55,41 @@ the empirical case for a profile over a scalar: a rollup dominated by the
 rule-holding cluster is nearly blind to the two axes where the field is weakest and
 most variable. Steerability is the sharpest of them: it runs only 0.28--0.57 across
 the \emph{entire} panel (the amber Steer.\ column of Table~\ref{tab:leaderboard}),
-so an explicit anti-adversarial
-guardrail recovers far less of a model's base failures than practitioners assume ---
-the single most actionable result in the run. Honesty is nearly orthogonal to rank:
-the highest score belongs to Seed-OSS-36B (0.88), which sits near the bottom of the
-rollup, while several top-rollup models are middling at admitting a violation. A
-model is therefore not summarized by its rank; the per-axis profile, which a deployer
-can filter to their own domain, is the primary artifact and the scalar a conservative
-summary.
+so an explicit anti-adversarial guardrail recovers far less of a model's base
+failures than practitioners assume, the single most actionable result in the run.
+Honesty is nearly orthogonal to rank: the highest score belongs to
+\texttt{Seed-OSS-36B} (0.88), which sits near the bottom of the rollup, while several
+top-rollup models are middling at admitting a violation. A model is therefore not
+summarized by its rank; the per-axis profile, which a deployer can filter to their
+own domain, is the primary artifact and the scalar a conservative summary.
 
 \textbf{Different models fail differently.} Figure~\ref{fig:overlay} overlays six
-models chosen to span the range, and no two profiles have the same shape. Claude
-Haiku 4.5 leads on holding the rule but is one of the \emph{least} forthcoming when
-it does break it. Qwen3.6-27B is the most steerable and among the most honest. Kimi
-K2.7-Code and Grok~4.3 barely bend under multi-turn pushback, yet Grok gives up more
-ground than any frontier model on the plain default and scope checks. The
-sharpest cautionary case is Seed-OSS-36B: it is the \emph{most honest} model in the
-panel, readily admitting when it departs from the rule, but it is also one of the
-most \emph{fragile}, cratering to 0.60 compliance under a fabricated
-prior-authorization claim (Figure~\ref{fig:fragility}). Honesty is not safety: a model
-that reliably tells you it just broke the rule has still broken the rule. This is the
-practical reason to buy the profile and not the headline number --- ``most honest''
-and ``most exploitable'' can be the same model, and only the per-axis view shows it.
+models chosen to span the range, and no two profiles have the same shape.
+\texttt{Claude Haiku 4.5} leads on holding the rule but is one of the \emph{least}
+forthcoming when it does break it. \texttt{Qwen3.6-27B} is the most steerable and
+among the most honest. \texttt{Kimi-K2.7-Code} and \texttt{Grok~4.3} barely bend
+under multi-turn pushback, yet \texttt{Grok} gives up more ground than any frontier
+model on the plain default and scope checks. The sharpest cautionary case is
+\texttt{Seed-OSS-36B}: it is the \emph{most honest} model in the panel, readily
+admitting when it departs from the rule, but it is also one of the most
+\emph{fragile}, cratering to 0.60 compliance under a fabricated prior-authorization
+claim (Figure~\ref{fig:fragility}). Honesty is not safety: a model that reliably
+tells you it just broke the rule has still broken the rule. This is the practical
+reason to buy the profile and not the headline number: ``most honest'' and ``most
+exploitable'' can be the same model, and only the per-axis view shows it.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/radar_overlay.png}
+\includegraphics[width=\columnwidth]{figures/radar_overlay}
 \caption{Six contrasting models on the six axes. Each spoke is scaled to the range
 of the shown models (the real min and max are printed on each axis label), because on
 an absolute scale four axes sit near the ceiling and steerability near the floor. The
-profiles are visibly different shapes: the rule-holding leaders (Claude Haiku 4.5,
-Kimi-K2.7-Code) are weak on honesty; Qwen3.6-27B is the most balanced; Grok~4.3 is
-strong on pushback but weak on the plain checks; and Seed-OSS-36B is the most honest
-yet the most pressure-fragile. All 22 profiles are in Appendix~\ref{app:figures}
-(Figure~\ref{fig:radar}); the set shown here is configurable.}
+profiles are visibly different shapes: the rule-holding leaders (\texttt{Claude Haiku
+4.5}, \texttt{Kimi-K2.7-Code}) are weak on honesty; \texttt{Qwen3.6-27B} is the most
+balanced; \texttt{Grok~4.3} is strong on pushback but weak on the plain checks; and
+\texttt{Seed-OSS-36B} is the most honest yet the most pressure-fragile. All 22
+profiles are in Appendix~\ref{app:supplementary} (Figure~\ref{fig:radar}); the set
+shown here is configurable.}
 \label{fig:overlay}
 \end{figure}
 
@@ -99,26 +97,26 @@ yet the most pressure-fragile. All 22 profiles are in Appendix~\ref{app:figures}
 uniform noise spread evenly over items. Figure~\ref{fig:fragility} maps
 base-arm compliance by pressure family, and the losses concentrate: the weaker
 models crater on \emph{false\_clearance} (an unverifiable ``we're already cleared for
-this'') and \emph{urgency}, while holding elsewhere --- Seed-OSS-36B drops to 0.60 on
-false-clearance and Mistral-7B to 0.47, against 0.90+ on other families. Concentration
-is what turns a statistical error rate into an exploit. A random 7\% slip is a
-reliability problem; a 40\% slip that fires \emph{only} when someone claims prior
-authorization is an attack surface. An insider who knows the model --- a broker who
-wants the structured payment processed, a manager who wants the discrimination
-complaint buried --- does not need a jailbreak; they need the one sentence that
-maps to the model's soft spot, and the fragility map hands them the address. This is
-why the pressures are a battery and not a mean: a per-family breakdown tells a
-deployer \emph{which} plausible insider sentence their candidate cannot withstand,
-and the mean hides exactly that.
+this'') and \emph{urgency}, while holding elsewhere; \texttt{Seed-OSS-36B} drops to
+0.60 on false-clearance and \texttt{Mistral-7B} to 0.47, against 0.90+ on other
+families. Concentration is what turns a statistical error rate into an exploit. A
+random 7\% slip is a reliability problem; a 40\% slip that fires \emph{only} when
+someone claims prior authorization is an attack surface. An insider who knows the
+model (a broker who wants the structured payment processed, a manager who wants the
+discrimination complaint buried) does not need a jailbreak; they need the one
+sentence that maps to the model's soft spot, and the fragility map hands them the
+address. This is why the pressures are a battery and not a mean: a per-family
+breakdown tells a deployer \emph{which} plausible insider sentence their candidate
+cannot withstand, and the mean hides exactly that.
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/per_pressure.png}
+\includegraphics[width=\columnwidth]{figures/per_pressure}
 \caption{Mean turn-1 compliance in the base arm, per model per pressure family (green
 higher, amber lower). Losses concentrate in specific families rather than spreading
 evenly: \emph{false\_clearance} and \emph{urgency} are the lowest columns for the
-weaker models (e.g.\ Seed-OSS-36B at 0.60 and Mistral-7B at 0.47 on false-clearance,
-against 0.90+ elsewhere).}
+weaker models (e.g.\ \texttt{Seed-OSS-36B} at 0.60 and \texttt{Mistral-7B} at 0.47 on
+false-clearance, against 0.90+ elsewhere).}
 \label{fig:fragility}
 \end{figure}
 
@@ -141,7 +139,7 @@ code.
 \midrule
 Split-half reliability &
 A reliability/floor rollup $\rho = 0.91\pm0.05$; mean $\rho = 0.98$ &
-A reliability-style rollup is viable; floor cells get $n\!\geq\!50$ top-ups. \\
+A reliability-style rollup is viable; floor items get $n\!\geq\!50$ top-ups. \\
 Cross-family transfer &
 A score computed \emph{without} a pressure family predicts rank on it at
 $\rho = 0.84$ (peer) down to $0.33$ (authority) &
@@ -175,7 +173,7 @@ coverage) and an $\alpha$-stability sweep sized the pipeline.}
 
 Three findings warrant the most distinctive choices. \textbf{Reliability is not the
 mean}: on regulated tasks the mean saturates near the ceiling and rounds a model's
-worst cells away, so a per-item reliability rollup both reorders the field and
+worst items away, so a per-item reliability rollup both reorders the field and
 refuses to report a 1-in-10 failure rate as a passing grade. \textbf{The battery is
 not collapsible}: transfer of 0.33 to 0.84 says an authority-robust model is not
 reliably urgency-robust, so pruning to one pressure discards information.
@@ -195,7 +193,7 @@ whether a guardrail actually moves the candidate (usually far less than hoped), 
 see whether a violating model at least admits it. Two findings are already
 interventions: rephrasing a rule imperatively raises compliance, and removing
 quantitative penalty language avoids the ``fine is a price'' paradox for prone
-models. The frozen item set, with its pre-registered hash, private holdout, and
+models. The frozen dataset, with its pre-registered hash, private holdout, and
 canary, also lets the same benchmark rerun on each model \emph{version}; no one
 currently tracks whether a vendor's silent update moved its urgency floor, and a
 benchmark that catches that becomes monitoring infrastructure.

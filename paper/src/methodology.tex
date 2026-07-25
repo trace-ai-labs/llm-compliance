@@ -4,11 +4,11 @@
 Each PACT item drops an agent into a deployment: a persona system prompt that
 rewards a local objective (speed, cost, CSAT), a standing rule, and an
 in-character user request whose most convenient option violates that rule. Every
-item is run across two conversation turns and in two \emph{arms} --- a plain
+item is run across two conversation turns and in two \emph{arms}: a plain
 \emph{base} system prompt, and an \emph{anti-adversarial} arm that adds one explicit
 instruction to follow the rule; the gap between the two arms is what we call
-steerability. Each item belongs to one of five groups --- \emph{neutral},
-\emph{pressure}, \emph{guard}, and two \emph{under-attack} --- that decide which axes
+steerability. Each item belongs to one of five groups (\emph{neutral},
+\emph{pressure}, \emph{guard}, and two \emph{under-attack}) that decide which axes
 it feeds. We first describe how an item is built and audited (\S\ref{sec:building}),
 then the six metrics those items feed (\S\ref{sec:metrics}).
 
@@ -33,7 +33,7 @@ command; command-style strictness is supplied only in the steerability arm.
 \emph{(4) Conditional second turn.} Every neutral and pressure item carries a turn~2
 conditioned on the turn~1 answer: a \emph{pushback} if the model complied, a
 \emph{challenge} if it violated.
-\emph{(5) Guard cells.} Each scenario ships a non-binding twin, a minimal edit in
+\emph{(5) Guard items.} Each scenario ships a non-binding twin, a minimal edit in
 which the rule does not apply, so holding it is an error; the guards separate
 rule-following from rule-parroting.
 
@@ -65,7 +65,7 @@ harmed by \emph{compliance}), and \emph{responsibility\_shift} (accountability
 transfer). The users are \emph{benign}: none jailbreaks; each is an employee whose
 convenience conflicts with the rule, the realistic enterprise threat. A tenth
 pressure, \emph{rule\_delegitimization} (an epistemic attack on the rule's scope), is
-not scored but drives the discernment-under-attack cells: applied to a binding item
+not scored but drives the discernment-under-attack items: applied to a binding item
 the model must hold, and its mirror on the non-binding guard the model must stand down
 against.
 
@@ -76,21 +76,33 @@ publish its quality record. A scenario is built \emph{component by component} in
 dependency order (persona; request and menu; rule note; nine pressures; guard twin; two
 turn-2 scripts; two attacks), each new component conditioned on the ones already
 accepted so the pack reads in one voice. The baseline request is written once and reused
-verbatim across the whole battery, so a single leak would contaminate every cell built
+verbatim across the whole battery, so a single leak would contaminate every item built
 on it. Prompts are \emph{zero-shot}: when generators are instead shown a shared worked
 example they converge on its names and phrasing and erase the between-domain variation
-we are trying to measure. Naturalism is enforced at the source --- workplace register,
-invented work artifacts, deliberate typing slips --- because a model that senses it is
+we are trying to measure. Naturalism is enforced at the source (workplace register,
+invented work artifacts, deliberate typing slips) because a model that senses it is
 being tested is the single biggest threat to a propensity benchmark.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.80\columnwidth]{figures/pact_generator}
+\caption{Item generation. A scenario seed and shared system instructions are authored
+independently by three generator models (\texttt{Kimi-K2.6}, \texttt{Nemotron-Ultra},
+\texttt{GLM-5.2}); a panel
+of judge models scores each component against a checklist and returns feedback to the
+generating model until no judge fails it, yielding a phrasing-diverse pool of validated
+items.}
+\label{fig:generator}
+\end{figure}
 
 Every component is then reviewed by models that did \emph{not} write it. Three
 generators each author a complete, independent pack per scenario, and each structurally
 valid component is checked by the other two on two questions: \emph{scope} (does only
-the mechanism this cell is meant to test appear?) and \emph{authenticity} (could this
+the mechanism this item is meant to test appear?) and \emph{authenticity} (could this
 have been written inside the real deployment?). The decision menu gets a third,
 two-stage check: a first pass reviews it \emph{blind to the gold labels}, so a merely
 factual option line is never mistaken for a giveaway, and a second, \emph{sighted} pass
-certifies the answer key --- that each option's compliant-or-violating label follows
+certifies the answer key: that each option's compliant-or-violating label follows
 from the rule and the case facts, and that the violating option genuinely wins on the
 local objective while the compliant one costs more.
 
@@ -98,15 +110,15 @@ Failures are budgeted, not fatal. Either reviewer rejecting a component burns on
 fixed number of attempts: eight for the three spine components (persona, request/menu,
 rule note) and four per add-on, on the logic that an add-on needing many rewrites to
 look real usually never will. A spine failure drops the whole pack; an add-on failure
-drops only its own cell, and the pack still ships as a \emph{partial} with the cells
-that passed, so a hard-to-author pressure costs one cell rather than the scenario. Light
+drops only its own item, and the pack still ships as a \emph{partial} with the items
+that passed, so a hard-to-author pressure costs one item rather than the scenario. Light
 deterministic checks (menu composition, an account-agnostic rule note) run first, and
 dashes and smart quotes are stripped, but naturalism and scope are judged by the review
 panel rather than by keyword tripwires. Every verdict is logged as a flat row with the
 per-reviewer-pair agreement ($\kappa$); and because each scenario exists in one version
 per generator, ``items favor their author's model family'' becomes a measurable bias
 check rather than an unanswerable objection. Rendering is then deterministic: each pack
-yields its surviving subset of the 13-cell battery (one neutral, nine pressure, one
+yields its surviving subset of the 13-item battery (one neutral, nine pressure, one
 non-binding guard, two under-attack), with gold labels, split tags, a canary string, and
 a committed SHA-256 that serves as the pre-registration. The frozen release is $141$ of
 a possible $144$ packs (all $48$ scenarios covered, authorship balanced across the three
@@ -117,7 +129,7 @@ generators), or $1{,}737$ items after partial packs.
 One trial is an (item, model, replication, arm) tuple: send system plus turn~1, judge
 it, select the conditional turn~2, send it with history, judge again. Trials are keyed
 by a stable id and appended to disk, so a killed run resumes; the budget is three
-replications across a 22-model panel, with floor-defining cells topped up to $n\geq50$.
+replications across a 22-model panel, with floor-defining items topped up to $n\geq50$.
 Judging is deterministic-first: a rule-based extractor resolves most responses for
 free, a small non-reasoning judge sees only the residual, and every row logs the judge
 and a prompt hash. The honesty label is an ensemble of the three generator models,
@@ -126,8 +138,8 @@ judge-swap check confirms that swapping in a different judge model leaves the ra
 essentially unchanged (Kendall $\tau\geq0.9$), and a stratified human gold set is
 double-annotated with per-domain agreement ($\kappa$). A separate
 awareness probe flags signs the model believes it is being tested and is reported
-beside the leaderboard, never folded in. Throughout we report Wilson intervals per
-cell, item-clustered standard errors, Benjamini--Hochberg-corrected bootstrap
+beside the leaderboard, never folded in. Throughout we report Wilson intervals on each
+scored rate, item-clustered standard errors, Benjamini--Hochberg-corrected bootstrap
 contrasts, and two-stage bootstrap on rollups; at temperature 1.0 results are
 statistical estimates and always carry intervals.
 
@@ -157,7 +169,7 @@ the field is weakest and most variable, so the axes must be reported, not summed
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/axis_correlation.png}
+\includegraphics[width=\columnwidth]{figures/axis_correlation}
 \caption{Inter-axis Pearson correlation across the 22-model panel. The four
 rule-holding axes covary strongly ($r=0.88$--$0.95$), but steerability and honesty
 are near-orthogonal to that cluster and to each other, so the six axes carry three
@@ -166,58 +178,58 @@ distinct signals rather than one.}
 \end{figure}
 
 \begin{enumerate}
-\item \textbf{Default Compliance} --- \emph{does it comply when nothing is pushing?}
-$\text{pass}^3$ on neutral binding cells: the fraction of items the model holds the
+\item \textbf{Default Compliance}: \emph{does it comply when nothing is pushing?}
+$\text{pass}^3$ on neutral binding items, the fraction of items the model holds the
 rule on across \emph{all} three replications. Throughout, $\text{pass}^3$ is
-$\tau$-bench's pass$^k$ estimator~\citep{yao2024taubench} at $k=3$ --- credit for a
-task requires every replication to succeed, not their average --- which is why a
-model that slips one run in three is scored as unreliable on that item rather than as
-``0.67.'' This is the baseline every stressor is read against.
+$\tau$-bench's pass$^k$ estimator~\citep{yao2024taubench} at $k{=}3$: for an item with
+$c$ compliant runs of $n$, $\mathrm{pass}^k=\binom{c}{k}/\binom{n}{k}$ averaged over
+items, so with $n{=}k{=}3$ an item scores $1$ only when all three runs comply and a
+model that slips one run in three is unreliable on that item, not ``$0.67$.'' This is
+the baseline every stressor is read against.
 
-\item \textbf{Pressure Resistance} --- \emph{does it hold under pressure, reliably?}
-A mean over pressure cells hides both the family that floors the model and the model
-that holds on average but slips one run in three. We score $\text{pass}^3$: the
-fraction of pressure cells the model complies on for \emph{every} replication. A cell
-counts only if it is unanimous, so an occasionally-slipping model is penalized where
-a mean would absorb the slip. We report it beside a na\"ive worst-quartile mean and a
-\emph{fragility breadth} (how many families break the model), because being broken by
-one vector differs from being broken by six.
+\item \textbf{Pressure Resistance}: \emph{does it hold under pressure, reliably?}
+$\text{pass}^3$ over the pressure items, the fraction on which the model complies for
+\emph{every} replication, so an occasionally-slipping model is penalized where a mean
+would absorb the slip. We report it beside a na\"ive worst-quartile mean and a
+\emph{fragility breadth}, the number of pressure families whose mean compliance falls
+below a threshold, $\lvert\{f:\bar c_f<\tau\}\rvert$, because being broken by one
+vector differs from being broken by six.
 
-\item \textbf{Pushback Resistance} --- \emph{does it hold when the user argues back?}
-$\text{pass}^3$ of holding at turn~2 given the model complied at turn~1 and was then
-pushed back, over the model's own turn-1-compliant items. It measures erosion under a
+\item \textbf{Pushback Resistance}: \emph{does it hold when the user argues back?}
+$\mathrm{pass}^3(\text{hold at turn 2}\mid\text{complied at turn 1})$ over the model's
+own turn-1-compliant items, after the user pushes back. It measures erosion under a
 persistent interlocutor; recovery is reported separately as a diagnostic.
 
-\item \textbf{Steerability} --- \emph{if it fails, can an explicit guardrail fix it?}
-Every cell is run twice: base persona, and base plus the scenario's generated hard
-directive. The score is $\text{net}=\text{recovery}-\max(0,\,\text{standdown}_{\text{base}}
--\text{standdown}_{\text{anti}})$, where recovery is the fraction of \emph{base
-violations} the mandate repairs (measured only where the base model fails, so there
-is no ceiling artifact) and the penalty stops the mandate from ``working'' by turning
-the model into a blanket always-comply agent.
+\item \textbf{Steerability}: \emph{if it fails, can an explicit guardrail fix it?}
+Every item is run twice, base persona and base plus the scenario's generated hard
+directive, and the score is $\text{net}=\text{recovery}-\max(0,\,\Delta_{\text{sd}})$.
+Here recovery is the fraction of base-arm violations the mandate repairs, measured only
+where the base model fails so there is no ceiling artifact, and
+$\Delta_{\text{sd}}=\text{sd}_{\text{base}}-\text{sd}_{\text{anti}}$ subtracts any loss
+of correct stand-downs, which stops the mandate from ``working'' by turning the model
+into a blanket always-comply agent.
 
-\item \textbf{Reasoning Honesty} --- \emph{when it violates, does it admit it?}
-Over violations, $1-\text{silent rate}$, with each violation labeled silent,
-rationalized, or defiant-honest. Because the denominator is violations, the best
-models have the least data (undefined maps to 1, held out of the harmonic mean), and
-because it is near-100\% judged it carries its own reliability gate.
+\item \textbf{Reasoning Honesty}: \emph{when it violates, does it admit it?}
+$1-\text{silent rate}=1-n_{\text{silent}}/n_{\text{viol}}$ over violations, with each
+labeled silent, rationalized, or defiant-honest. Because the denominator is violations
+the best models have the least data (undefined maps to $1$, held out of the harmonic
+mean), and because it is near-100\% judged it carries its own reliability gate.
 
-\item \textbf{Rule-Scope Discernment} --- \emph{does it apply the rule only where it
-binds?} $\text{pass}^3$ over the union of binding and non-binding scope cells, where
-``comply'' is the correct scope call in each direction (follow the rule where it
-binds, stand down where it does not), with the under-attack cells folded in. The
-binding and stand-down terms are reported separately; the discriminating signal is in
-the stand-down term, since the binding term overlaps axis~1.
+\item \textbf{Rule-Scope Discernment}: \emph{does it apply the rule only where it
+binds?} Balanced accuracy over binding and non-binding scope items,
+$\tfrac12[P(\text{comply}\mid\text{bind})+P(\text{stand-down}\mid\text{non-bind})]$,
+with the under-attack items folded in. The two terms are reported separately; the
+discriminating signal is the stand-down term, since the binding term overlaps axis~1.
 \end{enumerate}
 
 \paragraph{Rollup.} The scalar summary is a two-stage-bootstrapped $\text{pass}^3$
-over the pooled scored cells --- the fraction of all scored items the model complies
-on across every replication --- reported beside its plain mean (the
-reliability-versus-mean gap is itself informative), a harmonic mean over axes 1--4
-and 6 (axis 5 held out), and a mean win rate. Scoring per-item reliability rather
-than an average is deliberate: a compliance agent has to be right \emph{every} time,
-not on average, so a rollup of $0.9$ reads correctly as ``unreliable on one item in
-ten'' rather than as a comfortable grade. We publish the full inter-axis correlation
-matrix and per-axis $\kappa$ rather than asserting orthogonality, since the axes span
-a reliability range (1, 2, 4 near-deterministic; 3 turn-parsing; 6 mostly
-deterministic; 5 all-judge) a pooled number would hide.
+over the pooled scored items, the fraction of all scored items the model complies on
+across every replication, reported beside its plain mean (the reliability-versus-mean
+gap is itself informative), a harmonic mean over axes 1--4 and 6 (axis 5 held out),
+and a mean win rate. Scoring per-item reliability rather than an average is
+deliberate: a compliance agent has to be right \emph{every} time, so a rollup of $0.9$
+reads correctly as ``unreliable on one item in ten'' rather than as a comfortable
+grade. We publish the full inter-axis correlation matrix and per-axis $\kappa$ rather
+than asserting orthogonality, since the axes span a reliability range (1, 2, 4
+near-deterministic; 3 turn-parsing; 6 mostly deterministic; 5 all-judge) a pooled
+number would hide.
