@@ -1,117 +1,16 @@
 \section{Background and Motivation}
 \label{sec:related}
 
-Whether rules are followed has a century of theory behind it, and little of it is
-about knowing the rule. Rational deterrence treats a rule as a cost-benefit
-calculation~\citep{becker1968crime}; legitimacy theory says people obey authorities
-they see as legitimate, not sanctions they fear~\citep{tyler1990why}; and the ``fine
-is a price'' result shows that attaching a small, explicit penalty can \emph{reduce}
-compliance by recasting a norm as a purchasable service~\citep{gneezy2000fine}. Each
-predicts a failure mode for a deployed agent: defect once violation is cheap, bend to
-a manager who sounds authoritative, treat a priced rule as optional. These are
-propensity failures, invisible to any benchmark that only asks whether a model
-\emph{knows} the rule. That is the gap PACT measures. Below we situate it against four
-literatures that each capture a projection of the problem but not their intersection.
-
-\paragraph{Agentic and policy-adherence benchmarks.} $\tau$-bench and $\tau^2$-bench
-evaluate agents against an explicit policy with a simulated user and a stateful
-environment, and contribute the pass$^k$ estimator we
-adopt~\citep{yao2024taubench,barres2025tau2bench}. But their users are cooperative,
-so failures reflect capability and inconsistency rather than a user making
-non-compliance attractive; they ask whether an agent \emph{can} follow a policy, not
-whether it \emph{keeps} following one under pressure. Broader suites measure
-task-completion capability or accidental
-risk~\citep{liu2024agentbench,zhou2024webarena,ruan2024toolemu}, and recent
-policy-adherence work builds runtime \emph{enforcement} rather than measuring the
-propensity it backstops~\citep{zwerdling2025policyadherence}.
-
-\paragraph{Instruction following and instruction hierarchy.} A separate line asks
-whether a model obeys the instructions it is given. General instruction-following
-benchmarks such as \texttt{IFEval} check explicit, verifiable constraints (``answer in three
-bullets,'' ``include this keyword'')~\citep{zhou2023ifeval}: a capability with no
-competing incentive and no reason to disobey, whereas PACT's rule is a standing policy
-that a later, benign request gives the agent a reason to override. Closer is the
-\emph{instruction hierarchy}, where a system instruction conflicts with a user
-instruction and the model must prioritize the former; \texttt{IHEval} shows frontier models
-degrade sharply once such instructions conflict~\citep{zhang2025iheval}. PACT shares
-that system-rule-versus-user-request shape, but its conflict is not between two
-explicit instructions; it is between an explicit standing rule and an
-\emph{implicit} incentive carried by an ordinary user, scored behaviorally under
-theory-grounded pressure across turns rather than by constraint satisfaction on a
-single turn.
-
-\paragraph{Compliance and regulatory benchmarks.} A fast-growing set of benchmarks
-shares our vocabulary but not our target. Several put the model in the
-\emph{assessor} role, judging whether text, a request, or a dialogue complies:
-\texttt{CompliBench} scores LLM judges detecting violations in dialogue (and validates the
-grader, a task complementary to our judge validation rather than a propensity
-measure)~\citep{yang2026complibench}, \texttt{AIReg-Bench} has models assess EU AI Act
-compliance of technical documentation~\citep{marino2025airegbench}, and other work
-classifies whether a user request complies with policy~\citep{cisneros2026policycompliance};
-\texttt{SafeLawBench} is legal-knowledge QA and thus a capability
-test~\citep{cao2025safelawbench}. Closest are two agent-behavior benchmarks:
-\texttt{LogiSafetyBench} checks implicit regulatory compliance in single-shot tool and code
-invocation~\citep{song2026logisafety}, and \texttt{MAC-Bench} asks whether multi-agent systems
-abandon compliance to optimize task success~\citep{zhao2026macbench}. PACT
-differs from all of these in combining a single deployed agent, a \emph{benign}
-user applying theory-grounded social and economic pressure, an explicit multi-turn
-protocol, guard items for over-compliance, and a propensity rather than
-assessment or capability target.
-
-\paragraph{Safety and refusal benchmarks.} \texttt{HarmBench} and \texttt{AgentHarm} red-team for
-harmful capability under jailbreaks~\citep{mazeika2024harmbench,andriushchenko2024agentharm};
-\texttt{SORRY-Bench} and \texttt{AIR-Bench} score single-turn refusal of unsafe content, the latter
-from a regulation-derived taxonomy~\citep{xie2024sorrybench,zeng2024airbench}. Our
-adversary is the opposite: a benign user with a legitimate request that conflicts
-with a rule. \texttt{XSTest}'s over-refusal diagnostic~\citep{rottger2024xstest} is the
-safety-side analogue of our rule-scope discernment axis, and \texttt{DecodingTrust}
-established the multi-axis structure we follow~\citep{wang2023decodingtrust}.
-
-\paragraph{Honesty, sycophancy, and multi-turn robustness.} \texttt{MASK} disentangles
-honesty from accuracy~\citep{ren2025mask}; the insider-trading and in-context-scheming
-demonstrations~\citep{scheurer2023deceive,meinke2024scheming} are single hand-crafted
-pressure scenarios that our battery generalizes into a scored distribution. Our
-multi-turn design follows evidence that single-turn numbers overstate deployed
-behavior: models lose $\sim$39\% over turns~\citep{laban2025lost}, capitulate to a
-bare ``are you sure?''~\citep{laban2023flipflop}, and are sycophantic by
-training~\citep{sharma2023sycophancy}. The progressive-versus-regressive split
-of~\citet{fanous2025syceval} maps onto our separation of Steerability from Pushback
-Resistance.
-
-\paragraph{Benchmark methodology.} We build against documented failure modes.
-Construct-validity critiques motivate decomposing compliance into six argued axes
-rather than one scalar~\citep{jacobs2021measurement,bean2025measuring,raji2021everything,bowman2021fix};
-\texttt{BetterBench}~\citep{reuel2024betterbench} and the call for a science of
-evals~\citep{apollo2024scienceofevals} inform our reliability reporting.
-Contamination is a measured
-threat~\citep{golchin2024timetravel,haimes2024retroholdout,zhang2024gsm1k,kapoor2023leakage},
-so we freeze a pre-registered set with a private holdout and a
-canary~\citep{srivastava2023bigbench}. Our statistics follow evaluation best
-practice~\citep{miller2024errorbars,wilson1927ci,chen2021codex}, and our reliability
-rollup scores each item by pass$^k$, the estimator $\tau$-bench introduced for
-policy-following agents, which asks whether an agent succeeds on \emph{all} $k$
-independent trials of a task rather than on their average~\citep{yao2024taubench};
-we use $k=3$ and apply it per axis. LLM-judge
-validity~\citep{zheng2023mtbench,wang2023unfair} motivates deterministic-first,
-judge-swap-gated grading, and IRT
-benchmarking~\citep{hofmann2025fluid,polo2024tinybenchmarks,rodriguez2021informative}
-underpins the short-form monitoring use case.
-
-\paragraph{Compliance theory and the deployment record.} Each pressure
-operationalizes a mechanism from work on why people follow or abandon rules. The
-paradox that a weak penalty can \emph{reduce} compliance is the ``fine is a price''
-effect~\citep{gneezy2000fine}, with motivation-crowding~\citep{gneezy2000payenough,frey2001motivation}
-and expressive-law~\citep{sunstein1996expressive} companions against Beckerian
-deterrence~\citep{becker1968crime}; authority, peer, and commitment pressures draw
-on legitimacy theory~\citep{tyler1990why} and the persuasion
-literature~\citep{cialdini2009influence,cialdini1990focus,goldstein2008room}. The
-escalation design borrows from learning-to-defer and selective
-prediction~\citep{madras2018defer,mozannar2020defer,elyaniv2010selective,geifman2017selective},
-\texttt{HealthBench}'s bidirectional escalation rubric~\citep{arora2025healthbench}, and the
-abstention argument of~\citet{kalai2025hallucinate}. The failure class is legally
-live~\citep{moffatt2024aircanada,mobley2025workday,lecher2024mycity,ftc2024aicomply,finra2024notice2409,cfpb2023chatbots},
-against regulatory regimes whose penalties give the rules their
-teeth~\citep{dlapiper2026gdpr,hhs2024hipaapenalties,euaiact2024,eudsa2022}.
+Whether rules are followed is an old question in social science, and the answer is
+rarely about knowing the rule. Deterrence treats a rule as a cost-benefit
+calculation~\citep{becker1968crime}; legitimacy theory holds that people obey
+authorities they see as legitimate rather than sanctions they
+fear~\citep{tyler1990why}; and a well-known field result shows that a small, explicit
+penalty can even \emph{reduce} compliance by reframing a norm as a purchasable
+service~\citep{gneezy2000fine}. Each predicts a way a deployed assistant can fail that
+a knowledge test cannot see. Below we place PACT against the benchmark literatures it
+draws on, each of which captures part of the problem but not their intersection
+(Table~\ref{tab:compare}).
 
 \begin{table*}[t]
 \centering
@@ -127,7 +26,7 @@ teeth~\citep{dlapiper2026gdpr,hhs2024hipaapenalties,euaiact2024,eudsa2022}.
  & \rotatebox[origin=lB]{45}{Multi-domain}
  & \textbf{Reported metric} \\[1.4ex]
 \midrule
-\textbf{PACT (ours)} & Enterprise agent; a benign user with a conflicting need & \checkmark & \checkmark & \checkmark & \checkmark & Per-item reliability \\
+\textbf{PACT (ours)} & Enterprise assistant; a benign user with a conflicting need & \checkmark & \checkmark & \checkmark & \checkmark & Per-item reliability \\
 Prior study~\citep{priorstudy} & Procurement bot; one embedded rule & \checkmark & $\sim$ & \checkmark & -- & Compliance rate \\
 $\tau^2$-bench~\citep{barres2025tau2bench} & Support agent; cooperative user & \checkmark & -- & -- & $\sim$ & Task success (pass$^k$) \\
 \texttt{MASK}~\citep{ren2025mask} & Q\&A; prompt pressures a lie & -- & \checkmark & $\sim$ & \checkmark & Honesty score \\
@@ -142,14 +41,86 @@ $\tau^2$-bench~\citep{barres2025tau2bench} & Support agent; cooperative user & \
 side, whether each \emph{considers} multi-turn interaction, honesty, a battery of
 distinct pressures, and many domains (\checkmark\ yes, $\sim$ partial, -- no), and its
 headline \emph{metric}. Only PACT combines a benign incentive-conflict user, an
-embedded rule, multi-turn pushback, and nine theory-grounded pressures.}
+embedded rule, multi-turn pushback, and nine distinct pressures.}
 \label{tab:compare}
 \end{table*}
 
-\paragraph{The unfilled niche.} Policy-adherence benchmarks have the rule and the turns
-but a cooperative user; honesty benchmarks have the pressure but one shot and a
+\paragraph{Instruction following and policy adherence.} One line asks whether a model
+does what it is told. Instruction-following benchmarks such as \texttt{IFEval} check
+explicit, verifiable constraints (``answer in three
+bullets'')~\citep{zhou2023ifeval}, a capability with no competing incentive;
+\texttt{IHEval} adds an instruction \emph{hierarchy}, where a system instruction
+conflicts with a user instruction and frontier models degrade
+sharply~\citep{zhang2025iheval}. Agentic policy benchmarks put this in a tool-use
+setting: $\tau$-bench and $\tau^2$-bench evaluate an agent against an explicit policy
+with a simulated user, and contribute the pass$^k$ estimator we
+adopt~\citep{yao2024taubench,barres2025tau2bench}. But their users are cooperative, so
+failures reflect capability rather than a user making non-compliance attractive; and
+PACT's conflict is not between two explicit instructions but between an explicit
+standing rule and an \emph{implicit} incentive carried by an ordinary, benign request.
+Broader agent suites measure task capability or accidental
+risk~\citep{liu2024agentbench,zhou2024webarena,ruan2024toolemu}.
+
+\paragraph{Compliance and regulatory benchmarks.} A fast-growing set shares our
+vocabulary but not our target. Several cast the model as an \emph{assessor} of whether
+text or a request complies: \texttt{CompliBench} validates LLM judges on
+dialogue~\citep{yang2026complibench}, \texttt{AIReg-Bench} scores EU AI Act compliance
+of documentation~\citep{marino2025airegbench}, and \texttt{SafeLawBench} is
+legal-knowledge QA~\citep{cao2025safelawbench,cisneros2026policycompliance}. Closest
+are two agent-behavior benchmarks: \texttt{LogiSafetyBench} checks single-shot
+regulatory compliance in tool and code use~\citep{song2026logisafety}, and
+\texttt{MAC-Bench} asks whether multi-agent systems abandon compliance to finish a
+task~\citep{zhao2026macbench}. PACT differs in combining a single assistant, a benign
+pressure-applying user, an explicit multi-turn protocol, and a behavioral rather than
+assessment target.
+
+\paragraph{Safety, refusal, and honesty.} Red-teaming suites test refusal of
+\emph{malicious} instructions (\texttt{HarmBench}, \texttt{AgentHarm},
+\texttt{SORRY-Bench},
+\texttt{AIR-Bench})~\citep{mazeika2024harmbench,andriushchenko2024agentharm,xie2024sorrybench,zeng2024airbench};
+our adversary is the opposite, a benign user with a legitimate request that happens to
+conflict with a rule. \texttt{XSTest}'s over-refusal probe~\citep{rottger2024xstest}
+is the safety-side analogue of our rule-scope axis, and \texttt{DecodingTrust}
+established the multi-axis structure we follow~\citep{wang2023decodingtrust}. On the
+honesty side, \texttt{MASK} separates honesty from accuracy~\citep{ren2025mask}, and
+the insider-trading and scheming
+demonstrations~\citep{scheurer2023deceive,meinke2024scheming} are single hand-crafted
+pressure cases that our battery turns into a scored distribution. Evidence that
+single-turn numbers overstate deployed behavior (models lose $\sim$39\% over
+turns~\citep{laban2025lost}, cave to a bare ``are you
+sure?''~\citep{laban2023flipflop}, and are sycophantic by
+training~\citep{sharma2023sycophancy}) motivates our multi-turn design, whose
+progressive-versus-regressive split follows~\citet{fanous2025syceval}.
+
+\paragraph{Benchmark methodology.} We build against documented failure modes.
+Construct-validity critiques motivate decomposing compliance into argued axes rather
+than one
+scalar~\citep{jacobs2021measurement,bean2025measuring,raji2021everything,bowman2021fix};
+\texttt{BetterBench} and the call for a science of evals inform our reliability
+reporting~\citep{reuel2024betterbench,apollo2024scienceofevals}. Because contamination
+is a measured
+threat~\citep{golchin2024timetravel,haimes2024retroholdout,zhang2024gsm1k,kapoor2023leakage},
+we freeze a pre-registered set with a private holdout and a
+canary~\citep{srivastava2023bigbench}. Our reliability rollup scores each item by
+pass$^k$, which asks whether an agent succeeds on \emph{all} $k$ trials rather than on
+their average~\citep{yao2024taubench}, and LLM-judge validity
+concerns~\citep{zheng2023mtbench,wang2023unfair} motivate deterministic-first,
+judge-swap-gated grading.
+
+\paragraph{Theory and the deployment record.} Each pressure operationalizes a
+mechanism from the literature on why people follow or abandon rules: legitimacy and
+authority~\citep{tyler1990why}, descriptive norms and
+persuasion~\citep{cialdini2009influence,goldstein2008room}, and deterrence and its
+paradoxes~\citep{becker1968crime,gneezy2000payenough,frey2001motivation}. The failure
+class is legally
+live~\citep{moffatt2024aircanada,mobley2025workday,lecher2024mycity,ftc2024aicomply},
+against regulatory regimes whose penalties give the rules their
+teeth~\citep{dlapiper2026gdpr,hhs2024hipaapenalties,euaiact2024}.
+
+\paragraph{The unfilled niche.} Policy-adherence benchmarks have the rule and the
+turns but a cooperative user; honesty benchmarks have the pressure but one shot and a
 different target; harm and refusal benchmarks have the safety framing but an
 adversarial user asking for the violation; and compliance-\emph{grading} benchmarks
-score a judge rather than the agent. PACT targets their union (Table~\ref{tab:compare}):
-a benign user whose ordinary request conflicts with an embedded enterprise rule,
-pushed across turns by a battery of distinct pressures.
+score a judge rather than the assistant. PACT targets their union: a benign user whose
+ordinary request conflicts with an embedded enterprise rule, pushed across turns by a
+battery of distinct pressures.

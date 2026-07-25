@@ -1,12 +1,12 @@
-\section{PACT: A Compliance Benchmark for Regulated Enterprise Agents}
+\section{PACT: A Compliance Benchmark for Regulated Enterprise Assistants}
 \label{sec:pact}
 
-Each PACT item drops an agent into a deployment: a persona system prompt that
-rewards a local objective (speed, cost, CSAT), a standing rule, and an
-in-character user request whose most convenient option violates that rule. Every
-item is run across two conversation turns and in two \emph{arms}: a plain
-\emph{base} system prompt, and an \emph{anti-adversarial} arm that adds one explicit
-instruction to follow the rule; the gap between the two arms is what we call
+Each PACT item drops an agent into a scenario: a persona system prompt that
+rewards a local objective (speed, cost, customer satisfaction), a standing rule, and
+an in-character user request whose most convenient option violates that rule. Every
+item is run across two conversation turns and in two \emph{modes}: a plain
+\emph{base} system prompt, and an \emph{anti-adversarial} mode that adds one explicit
+instruction to follow the rule; the gap between the two modes is what we call
 steerability. Each item belongs to one of five groups (\emph{neutral},
 \emph{pressure}, \emph{guard}, and two \emph{under-attack}) that decide which axes
 it feeds. We first describe how an item is built and audited (\S\ref{sec:building}),
@@ -17,24 +17,23 @@ then the six metrics those items feed (\S\ref{sec:metrics}).
 
 \subsubsection{The measurement template.}
 \label{sec:template}
-Every item instantiates one template, and this isomorphism is what makes compliance
-rates comparable across unrelated domains. It fixes five invariants.
-\emph{(1) Deployment framing.} A \emph{system} prompt gives the agent's persona and
-the KPIs it is measured on and never mentions the decision; the rule is appended as a
-standing, account-agnostic note stating the general rule only. A \emph{user} turn
-carries the request, case facts, and menu. Compliance is stated nowhere: which option
-satisfies the rule is derivable only by joining the case facts to the rule, making
-each item a reasoning task rather than a keyword match.
-\emph{(2) Dominance structure.} The menu holds two to five options with at least one
-rule-violating option that strictly dominates on the local objective and at least one
-rule-compliant option that costs more; menu order never encodes compliance.
-\emph{(3) Informational framing.} The rule is a neutral statement of fact, never a
-command; command-style strictness is supplied only in the steerability arm.
-\emph{(4) Conditional second turn.} Every neutral and pressure item carries a turn~2
-conditioned on the turn~1 answer: a \emph{pushback} if the model complied, a
-\emph{challenge} if it violated.
-\emph{(5) Guard items.} Each scenario ships a non-binding twin, a minimal edit in
-which the rule does not apply, so holding it is an error; the guards separate
+Every item follows one template, which is what makes compliance rates comparable
+across unrelated domains. Five things are fixed.
+\emph{(1) Deployment framing.} The \emph{system} prompt gives the assistant its
+persona and the targets it is measured on, but never mentions the decision; the rule
+is added as a standing, general note. The \emph{user} turn carries the request, the
+case facts, and the menu of options. Nothing says which option is compliant: the model
+has to join the facts to the rule to tell, so each item is a reasoning task, not a
+keyword match.
+\emph{(2) Dominant shortcut.} The menu offers two to five options; at least one
+violates the rule while winning on the local objective, and at least one complies but
+costs more. Option order is randomized and never signals the answer.
+\emph{(3) Neutral rule wording.} The rule is stated as plain fact, never as a command;
+command-style strictness appears only in the steerability mode.
+\emph{(4) Conditional second turn.} After the first answer, a follow-up pushes back if
+the model complied and challenges it if it violated.
+\emph{(5) Non-binding twin.} Each scenario ships a near-identical version in which the
+rule does not apply, so \emph{holding} the rule there is the error; the twin separates
 rule-following from rule-parroting.
 
 \subsubsection{Domains and scenarios.}
@@ -81,7 +80,7 @@ on it. Prompts are \emph{zero-shot}: when generators are instead shown a shared 
 example they converge on its names and phrasing and erase the between-domain variation
 we are trying to measure. Naturalism is enforced at the source (workplace register,
 invented work artifacts, deliberate typing slips) because a model that senses it is
-being tested is the single biggest threat to a propensity benchmark.
+being tested is the single biggest threat to a behavioral benchmark.
 
 \begin{figure}[t]
 \centering
@@ -126,7 +125,7 @@ generators), or $1{,}737$ items after partial packs.
 
 \subsubsection{Evaluation protocol.}
 \label{sec:protocol}
-One trial is an (item, model, replication, arm) tuple: send system plus turn~1, judge
+One trial is an (item, model, replication, mode) tuple: send system plus turn~1, judge
 it, select the conditional turn~2, send it with history, judge again. Trials are keyed
 by a stable id and appended to disk, so a killed run resumes; the budget is three
 replications across a 22-model panel, with floor-defining items topped up to $n\geq50$.
@@ -146,26 +145,26 @@ statistical estimates and always carry intervals.
 \subsection{Metrics for Assessment}
 \label{sec:metrics}
 
-\paragraph{Why a profile, not a score.} ``Will this agent follow the rule?'' looks
-like one question, but it is not. On data from a prior single-domain study (\S\ref{sec:validation})
-compliance is not a single latent trait: the first principal component of the
-model-by-condition rate matrix explains only 47\% of the variance, the behavioral
-dimensions inter-correlate at most 0.64, and a score computed \emph{without} a given
-pressure family predicts a model's rank \emph{on} that family only weakly (Spearman
-$\rho$ from 0.33 to 0.84). A model robust to a manager's order is not reliably robust
-to a deadline. A single scalar would therefore be wrong about the structure of the
-phenomenon, not merely lossy, and it would let a model average away the one condition
-where it catastrophically fails. PACT instead reports six axes, each a distinct
-question a deployer actually asks and each engineered against a specific way a naive
-metric misleads. All are on $[0,1]$, higher better, computed by pure functions over
-the trial records; only axis~5 consumes a judge. On the 22-model panel the axes fall
-into three near-independent factors (Figure~\ref{fig:axiscorr}): a rule-holding
-cluster (default compliance, pressure and pushback resistance, rule-scope
-discernment) that covaries because a capable model tends to hold across conditions,
-plus \emph{steerability} and \emph{honesty}, each near-uncorrelated with the cluster
-and with each other. The practical consequence is the same as the design argument: a
-scalar dominated by the rule-holding cluster is nearly blind to the two axes on which
-the field is weakest and most variable, so the axes must be reported, not summed.
+\paragraph{Why a profile, not a score.} A single compliance number would be
+convenient, but it would mislead. Following a rule is not one behavior: a model can
+stand firm against a demanding manager yet fold the moment a deadline appears, or
+resist every pressure yet never admit the one time it slips. In our prior-study data
+(\S\ref{sec:validation}) these behaviors barely move together: the first principal
+component of the model-by-condition matrix explains only 47\% of the variance, the
+behavioral dimensions correlate at most 0.64, and a model's scores on five pressure
+families predict its rank on the sixth only weakly (Spearman $\rho$ from 0.33 to
+0.84). A single scalar would not merely lose detail; it would let a model average away
+the one situation where it fails badly and still post a comfortable number. PACT
+therefore reports six axes, each answering a concrete question a team would ask before
+trusting a model and each built to resist a specific way a naive metric misleads. All
+sit on $[0,1]$, higher is better, and are read straight off the trial records; only
+the honesty axis needs a judge. On the 22-model panel the axes fall into three
+near-independent groups (Figure~\ref{fig:axiscorr}): four \emph{rule-holding} axes
+that move together because a capable model tends to hold across conditions, plus
+\emph{steerability} and \emph{honesty}, each largely uncorrelated with the rest and
+with each other. A scalar dominated by the rule-holding group would be nearly blind to
+the two axes on which models differ most, so we report the axes rather than summing
+them.
 
 \begin{figure}[t]
 \centering
@@ -203,7 +202,7 @@ persistent interlocutor; recovery is reported separately as a diagnostic.
 \item \textbf{Steerability}: \emph{if it fails, can an explicit guardrail fix it?}
 Every item is run twice, base persona and base plus the scenario's generated hard
 directive, and the score is $\text{net}=\text{recovery}-\max(0,\,\Delta_{\text{sd}})$.
-Here recovery is the fraction of base-arm violations the mandate repairs, measured only
+Here recovery is the fraction of base-mode violations the mandate repairs, measured only
 where the base model fails so there is no ceiling artifact, and
 $\Delta_{\text{sd}}=\text{sd}_{\text{base}}-\text{sd}_{\text{anti}}$ subtracts any loss
 of correct stand-downs, which stops the mandate from ``working'' by turning the model
@@ -227,9 +226,7 @@ over the pooled scored items, the fraction of all scored items the model complie
 across every replication, reported beside its plain mean (the reliability-versus-mean
 gap is itself informative), a harmonic mean over axes 1--4 and 6 (axis 5 held out),
 and a mean win rate. Scoring per-item reliability rather than an average is
-deliberate: a compliance agent has to be right \emph{every} time, so a rollup of $0.9$
+deliberate: an assistant in a regulated workflow has to be right \emph{every} time, so a rollup of $0.9$
 reads correctly as ``unreliable on one item in ten'' rather than as a comfortable
-grade. We publish the full inter-axis correlation matrix and per-axis $\kappa$ rather
-than asserting orthogonality, since the axes span a reliability range (1, 2, 4
-near-deterministic; 3 turn-parsing; 6 mostly deterministic; 5 all-judge) a pooled
-number would hide.
+grade. We publish the full inter-axis correlations and per-axis $\kappa$ rather than
+asserting orthogonality.
