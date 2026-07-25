@@ -1,16 +1,21 @@
-\section{Background and Motivation}
+\section{Background}
 \label{sec:related}
 
-PACT sits between several research areas, and none of them measures quite what it
-does. We place it against each below, and Table~\ref{tab:compare} summarizes the
-comparison.
+Through PACT, we seek to answer whether enterprise LLM assistants comply with rules when some objective, like cost or speed,
+conflicts with compliance under user pressures or in multi-turn conversation; when models fail to comply, why they do so, and 
+whether explicit prompt engineering can close the gap.        
+
+To answer these questions, PACT rigorously merges several existing research threads, such as instruction following,
+regulatory benchmarks, and safety, with practical concerns crucial for 
+deploying AI agents to sensitive production use-cases. In this section, we situate PACT
+among these threads. Table~\ref{tab:compare} summarizes the comparison between PACT and current LLM evaluation literature. 
 
 \begin{table*}[t]
 \centering
 \footnotesize
 \setlength{\tabcolsep}{6pt}
 \renewcommand{\arraystretch}{1.0}
-\begin{tabular}{@{}p{3.9cm} p{4.2cm} cccc p{3.6cm}@{}}
+\begin{tabular}{@{}p{3.4cm} p{4.2cm} cccc p{3.9cm}@{}}
 \toprule
 \textbf{Benchmark} & \textbf{Setting}
  & \rotatebox[origin=lB]{45}{Multi-turn}
@@ -19,15 +24,15 @@ comparison.
  & \rotatebox[origin=lB]{45}{Multi-domain}
  & \textbf{Reported metric} \\[1.4ex]
 \midrule
-\textbf{PACT (ours)} & Enterprise assistant; a benign user with a conflicting need & \checkmark & \checkmark & \checkmark & \checkmark & Per-item reliability \\
-Prior study & Procurement bot; one embedded rule & \checkmark & $\sim$ & \checkmark & -- & Compliance rate \\
-$\tau^2$-bench~\citep{barres2025tau2bench} & Support agent; cooperative user & \checkmark & -- & -- & $\sim$ & Task success (pass$^k$) \\
-\texttt{MASK}~\citep{ren2025mask} & Q\&A; prompt pressures a lie & -- & \checkmark & $\sim$ & \checkmark & Honesty score \\
-\texttt{AgentHarm}~\citep{andriushchenko2024agentharm} & Agent given malicious tasks & -- & -- & -- & \checkmark & Harm / refusal score \\
-\texttt{AIR-Bench}~\citep{zeng2024airbench} & Prompts for unsafe content & -- & -- & -- & \checkmark & Refusal rate \\
-\texttt{SORRY-Bench}~\citep{xie2024sorrybench} & Prompts for unsafe content & $\sim$ & -- & -- & \checkmark & Refusal rate \\
-\texttt{CompliBench}~\citep{yang2026complibench} & Model grades chat transcripts & \checkmark & -- & -- & $\sim$ & Detection F1 (as judge) \\
-\texttt{MAC-Bench}~\citep{zhao2026macbench} & Multi-agent task simulation & \checkmark & -- & $\sim$ & $\sim$ & Compliance vs.\ task \\
+\textbf{PACT (ours)} & Enterprise assistant; a benign user with a conflicting need & \checkmark & \checkmark & \checkmark & \checkmark & 6-axis profile \\
+$\tau^2$-bench & Support agent; cooperative user & \checkmark & -- & -- & $\sim$ & Task success (pass$^k$) \\
+\texttt{MASK} & Q\&A; prompt pressures a lie & -- & \checkmark & $\sim$ & \checkmark & Honesty score \\
+\texttt{AgentHarm} & Agent given malicious tasks & -- & -- & -- & \checkmark & Harm / refusal score \\
+\texttt{AIR-Bench} & Prompts for unsafe content & -- & -- & -- & \checkmark & Refusal rate \\
+\texttt{SORRY-Bench} & Prompts for unsafe content & $\sim$ & -- & -- & \checkmark & Refusal rate \\
+\texttt{CompliBench} & Model grades chat transcripts & \checkmark & -- & -- & $\sim$ & Detection F1 (as judge) \\
+\texttt{MAC-Bench} & Multi-agent task simulation & \checkmark & -- & $\sim$ & $\sim$ & Compliance vs.\ task \\
+Okamoto et al.\ (2026) & Procurement bot; one embedded rule & \checkmark & $\sim$ & \checkmark & -- & Compliance rate \\
 \bottomrule
 \end{tabular}
 \caption{PACT versus its nearest neighbors. We compare the \emph{setting} and who the
@@ -39,67 +44,56 @@ pressures.}
 \label{tab:compare}
 \end{table*}
 
-\paragraph{Instruction following and policy adherence.} One line asks whether a model
-does what it is told. Instruction-following benchmarks such as \texttt{IFEval} check
+\paragraph{Instruction following and policy adherence.} One thread asks whether models are capable of acting as told,
+with \textit{no competing incentives present}. Instruction-following benchmarks such as \texttt{IFEval} check
 explicit, verifiable constraints (``answer in three
-bullets'')~\citep{zhou2023ifeval}, a capability with no competing incentive;
-\texttt{IHEval} adds an instruction \emph{hierarchy}, where a system instruction
-conflicts with a user instruction and frontier models degrade
-sharply~\citep{zhang2025iheval}. Agentic policy benchmarks put this in a tool-use
-setting: $\tau$-bench and $\tau^2$-bench evaluate an agent against an explicit policy
-with a simulated user, and contribute the pass$^k$ estimator we
-adopt~\citep{yao2024taubench,barres2025tau2bench}. But their users are cooperative, so a
-failure shows a gap in the agent's capability; nobody is making non-compliance
-attractive. PACT's conflict works differently: it sets an explicit standing rule
-against an \emph{implicit} incentive carried by an ordinary, benign request.
-Broader agent suites measure task capability or accidental
-risk~\citep{liu2024agentbench,zhou2024webarena,ruan2024toolemu}.
+bullets'')~\citep{zhou2023ifeval}, which
+\texttt{IHEval} extends with an instruction \emph{hierarchy}, where instructions may conflict~\citep{zhang2025iheval}.
+In an agentic setting, $\tau$-bench and $\tau^2$-bench assess policy adherence in conversations with a simulated user~\citep{yao2024taubench,barres2025tau2bench}, but also fundamentally assess capability, since their users are cooperative.
+%
+In contrast, PACT pairs an explicit standing rule
+against an \emph{implicit} incentive carried by an ordinary, benign request, as is characteristic of an agentic enterprise system.
 
-\paragraph{Compliance and regulatory benchmarks.} A fast-growing set uses our
-vocabulary but aims at a different target. Several cast the model as an \emph{assessor}
-of whether text or a request complies: \texttt{CompliBench} validates LLM judges on
-dialogue~\citep{yang2026complibench}, \texttt{AIReg-Bench} scores EU AI Act compliance
-of documentation~\citep{marino2025airegbench}, and \texttt{SafeLawBench} is
-legal-knowledge QA~\citep{cao2025safelawbench,cisneros2026policycompliance}. Closest
-are two agent-behavior benchmarks: \texttt{LogiSafetyBench} checks single-shot
-regulatory compliance in tool and code use~\citep{song2026logisafety}, and
-\texttt{MAC-Bench} asks whether multi-agent systems abandon compliance to finish a
-task~\citep{zhao2026macbench}. PACT differs by combining a single assistant, a benign
-user who applies pressure, an explicit multi-turn protocol, and a target that is
-behavioral instead of assessment.
+\paragraph{Compliance and regulatory benchmarks.} A growing body of work measures whether LLM judges
+can correctly assess whether a document or request complies with law~\citep{yang2026complibench, marino2025airegbench,cao2025safelawbench,cisneros2026policycompliance},
+as opposed to whether an agent can fulfill requests compliantly.
+%
+Most similar to PACT are \texttt{LogiSafetyBench}, which checks single-turn
+regulatory compliance in tool and code use~\citep{song2026logisafety}, which results primarily in a measurement of capability, and
+\texttt{MAC-Bench}, which asks whether multi-agent systems abandon compliance to finish a
+task~\citep{zhao2026macbench}. PACT also differs in three additional ways: First, PACT measures an agent in an enterprise setting servicing a human request,
+whereas neither \texttt{LogiSafetyBench} nor \texttt{MAC-Bench} shares this setting or includes a human user, noting that multi-agent collaboration is 
+generally atypical for assistive agents~\citep{adimulam2026orchestration}. Second, PACT features pressures and incentives realistic for the setting, whereas the former includes
+no pressures and the latter only includes the pressure of task completion, and it never asks the agent to choose between options. Third, PACT features a multi-metric
+methodology that characterizes compliance into multiple axes, instead of measuring only compliance rate.
 
 \paragraph{Safety, refusal, and honesty.} Red-teaming suites test refusal of
 \emph{malicious} instructions (\texttt{HarmBench}, \texttt{AgentHarm},
 \texttt{SORRY-Bench},
 \texttt{AIR-Bench})~\citep{mazeika2024harmbench,andriushchenko2024agentharm,xie2024sorrybench,zeng2024airbench};
-our adversary is the opposite, a benign user with a legitimate request that happens to
+our adversary is the opposite, a user with a legitimate request that happens to
 conflict with a rule. \texttt{XSTest}'s over-refusal probe~\citep{rottger2024xstest}
-is the safety-side analogue of our rule-scope axis, and \texttt{DecodingTrust}
-established the multi-axis structure we follow~\citep{wang2023decodingtrust}. On the
+is the safety-side analogue of our rule-scope discernment axis. On the
 honesty side, \texttt{MASK} separates honesty from accuracy~\citep{ren2025mask}, and
 the insider-trading and scheming
 demonstrations~\citep{scheurer2023deceive,meinke2024scheming} are single hand-crafted
-pressure cases that our battery turns into a scored distribution. Single-turn numbers
-overstate how models behave once deployed: models lose $\sim$39\% over
-turns~\citep{laban2025lost}, cave to a bare ``are you
-sure?''~\citep{laban2023flipflop}, and are sycophantic by
-training~\citep{sharma2023sycophancy}. This motivates our multi-turn design, whose
-progressive-versus-regressive split follows~\citet{fanous2025syceval}.
+pressure cases that our battery turns into a scored distribution. Literature shows single-turn figures
+overstate how models behave once deployed, as models lose $\sim$39\% over
+turns and are inherently sycophantic~\citep{laban2025lost, sharma2023sycophancy}.
 
 \paragraph{Grounding in theory and law.} Each pressure is drawn from research on why
 people follow or break rules: legitimacy and authority~\citep{tyler1990why},
 descriptive norms and persuasion~\citep{cialdini2009influence,goldstein2008room}, and
 deterrence and its paradox that a small penalty can \emph{lower}
 compliance~\citep{becker1968crime,gneezy2000fine,gneezy2000payenough,frey2001motivation}.
-The failures are already real in
-court~\citep{moffatt2024aircanada,mobley2025workday,lecher2024mycity,ftc2024aicomply},
-under regulations whose penalties give the rules their
-teeth~\citep{dlapiper2026gdpr,hhs2024hipaapenalties,euaiact2024}.
+Failure of agents to these pressures are already observed in legal proceedings in several jurisdictions~\citep{moffatt2024aircanada,lecher2024mycity,ftc2024aicomply} 
+and studied in the procurement chatbot domain by \citet{priorstudy}.
 
-\paragraph{The gap that matters.} Policy-adherence benchmarks have the rule and the
-turns but a cooperative user; honesty benchmarks have the pressure but one shot and a
-different target; harm and refusal benchmarks have the safety framing but an
-adversarial user asking for the violation; and compliance-\emph{grading} benchmarks
-score a judge instead of the assistant. PACT targets their union: a benign user whose
-ordinary request conflicts with an embedded enterprise rule, pushed across turns by a
-battery of distinct pressures.
+\paragraph{The gap that matters.} While all research threads discussed assess an attribute of LLM rule-following or safety,
+we index on the attributes most important for an enterprise agent in production, and no prior thread covers them
+together. Policy-adherence benchmarks have the rule and the turns, but a cooperative user; honesty benchmarks have
+the pressure, but one shot and a different target; harm and refusal benchmarks have the safety framing, but an
+adversarial user asking for the violation; and compliance-\emph{grading} benchmarks score a judge instead of the
+assistant. An enterprise agent in production meets all of these at once, and that is the case PACT measures: a benign
+user whose ordinary request conflicts with an embedded enterprise rule, pushed across turns by a battery of distinct
+pressures.
