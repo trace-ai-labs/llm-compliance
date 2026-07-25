@@ -859,6 +859,8 @@ def _stacked_by_model(per_judge, tmodel, labels, colors, title, sort_key, path):
               bbox_to_anchor=(0.5, 1.02), frameon=False)
     fig.tight_layout()
     fig.savefig(path, dpi=130, bbox_inches="tight")
+    if path.lower().endswith(".png"):      # also emit a vector PDF for the paper
+        fig.savefig(path[:-4] + ".pdf", bbox_inches="tight")
     plt.close(fig)
     print(f"  wrote {path}")
     return {m.split("/")[-1]: dict(per[m]) for m in models}
