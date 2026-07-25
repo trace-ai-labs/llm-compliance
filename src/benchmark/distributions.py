@@ -194,6 +194,59 @@ def plot_steer_baseline(da: Dict[str, Dict[str, Optional[float]]], path: str) ->
     plt.close(fig)
 
 
+def significance_summary(contrasts_path: str, metrics_path: str) -> dict:
+    """Read the BH-adjusted pairwise contrasts and the rollup ranking; report how
+    many pairs differ significantly and the size of the top indistinguishable
+    cluster (models not significantly below the best on the rollup)."""
+    with open(metrics_path, encoding="utf-8") as f:
+        met = {r["model"]: float(r["rollup_p3"]) for r in csv.DictReader(f)
+               if r.get("rollup_p3") not in ("", None)}
+    order = sorted(met, key=lambda m: -met[m])
+    with open(contrasts_path, encoding="utf-8") as f:
+        rows = list(csv.DictReader(f))
+    pbh = {}
+    for r in rows:
+        pbh[frozenset((r["model_a"], r["model_b"]))] = float(r["p_bh"])
+    n_sig = sum(1 for r in rows if float(r["p_bh"]) < 0.05)
+    top = order[0]
+    cluster = [top] + [m for m in order[1:]
+                       if pbh.get(frozenset((top, m)), 0.0) >= 0.05]
+    return {"n_pairs": len(rows), "n_sig": n_sig, "top": top,
+            "cluster": cluster, "order": order, "rollup": met}
+
+
+def plot_rollup_ci(metrics_path: str, path: str) -> None:
+    """Caterpillar plot: rollup point estimate with 95% CI for every model,
+    ordered best-first. The dashed line marks the best model's lower CI bound;
+    any interval crossing it is not separable from the top at the margin, which
+    is why the ranking's head is a cluster, not a single winner. (The rigorous
+    paired-test cluster is reported in the text.)"""
+    import matplotlib.pyplot as plt
+    FS.use_paper_style()
+    with open(metrics_path, encoding="utf-8") as f:
+        rows = [r for r in csv.DictReader(f)
+                if r.get("rollup_p3_lo") not in ("", None)]
+    rows.sort(key=lambda r: float(r["rollup_p3"]))
+    best_lo = float(max(rows, key=lambda r: float(r["rollup_p3"]))["rollup_p3_lo"])
+    ys = range(len(rows))
+    fig, ax = plt.subplots(figsize=(6.6, 7.2))
+    for y, r in zip(ys, rows):
+        v = float(r["rollup_p3"])
+        lo, hi = float(r["rollup_p3_lo"]), float(r["rollup_p3_hi"])
+        col = FS.BLUE if hi >= best_lo else FS.MUTED
+        ax.plot([lo, hi], [y, y], color=col, lw=1.6, zorder=2)
+        ax.scatter([v], [y], color=col, s=30, zorder=3)
+    ax.set_yticks(list(ys))
+    ax.set_yticklabels([FS.short(r["model"]) for r in rows], fontsize=8)
+    ax.set_xlabel(r"Rollup $\mathrm{pass}^3$")
+    ax.set_title("Rollup with 95% confidence intervals (two-stage bootstrap)")
+    ax.axvline(best_lo, color=FS.RED, ls="--", lw=0.9, alpha=0.7, zorder=1)
+    ax.grid(True, axis="x", alpha=0.3)
+    fig.savefig(path, bbox_inches="tight")
+    fig.savefig(path[:-4] + ".pdf", bbox_inches="tight")
+    plt.close(fig)
+
+
 def main() -> None:
     trials = load_trials(TRIALS_DIR)
     cells = M.build_cells(trials)
@@ -231,6 +284,16 @@ def main() -> None:
     ss = [da[d]["steerability"] for d in da]
     print(f"\n  r(domain default, steerability) = {_pearson(dd, ss):+.2f}  "
           f"(headroom would predict a negative slope)")
+
+    # 5. rollup CIs + pairwise significance (uncertainty reporting)
+    metrics_path = os.path.join(OUT_DIR, "metrics_v2.csv")
+    contrasts_path = os.path.join(OUT_DIR, "contrasts_v2.csv")
+    if os.path.exists(metrics_path) and os.path.exists(contrasts_path):
+        sig = significance_summary(contrasts_path, metrics_path)
+        plot_rollup_ci(metrics_path, os.path.join(FIG_DIR, "rollup_ci.png"))
+        print(f"\n  pairwise: {sig['n_sig']}/{sig['n_pairs']} significant at BH p<0.05; "
+              f"top cluster (tied with {FS.short(sig['top'])}): "
+              f"{len(sig['cluster'])} models -> {[FS.short(m) for m in sig['cluster']]}")
 
     # headline findings for the prose
     print("\n== domain x axis (panel mean) ==")

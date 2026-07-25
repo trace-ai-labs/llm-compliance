@@ -68,6 +68,7 @@ PAPER_FIGURES = [
     "unclear_taxonomy.png",  # appendix: 6-way reason-for-abstention split
     "domain_pressure_heatmap.png",  # appendix: t1 compliance, domain x pressure
     "steer_baseline.png",           # appendix: steerability vs baseline (headroom check)
+    "rollup_ci.png",                # appendix: rollup 95% CI caterpillar + top cluster
 ]
 
 
