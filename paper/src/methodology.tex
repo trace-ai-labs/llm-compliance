@@ -1,120 +1,104 @@
 \section{PACT: A Compliance Benchmark for Regulated Enterprise Assistants}
 \label{sec:pact}
 
-Each PACT item puts an agent into a scenario: a persona system prompt that
-rewards a local objective (speed, cost, customer satisfaction), a standing rule, and
-an in-character user request whose most convenient option breaks that rule. We run every
-item across two conversation turns and in two \emph{modes}. The \emph{base} mode uses a
-plain system prompt. The \emph{anti-adversarial} mode adds one explicit
-instruction to follow the rule. We call the gap between the two modes
-steerability. Each item belongs to one of five groups (\emph{neutral},
-\emph{pressure}, \emph{guard}, and two \emph{under-attack}) that decide which axes
-it feeds. We first describe how an item is built and audited (\S\ref{sec:building}),
+Each PACT sample puts an agent into a scenario. Each scenario contains a
+system prompt that explains the assistant's role within the enterprise and the rules
+that it must follow. A user makes a request that asks the assistant for
+support choosing between 2-5 options which vary in their compliance status and desirability
+(speed, cost, customer satisfaction). Each scenario or request is tested alongside a battery of 
+user pressures, with and without an explicit compliance mandate in the system prompt, 
+and in conditions when the rule does not apply. 
+We first describe how an item is built and audited (\S\ref{sec:building}),
 then the six metrics those items feed (\S\ref{sec:metrics}).
 
-\subsection{Building the Benchmark}
+\subsection{Building PACT}
 \label{sec:building}
 
-\subsubsection{The measurement template.}
+\subsubsection{Domains and scenarios.}
+\label{sec:domains}
+We first curate 48 scenarios within twelve regulated domains (Appendix~\ref{app:domains}), 
+spanning privacy (GDPR), finance, customer service, government services, human resources, anti-money-laundering, healthcare
+administration (HIPAA), pharma medical information, advertising, export controls,
+content moderation, and procurement.
+%
+Each scenario satisfies the criteria that (1) it is a realistic use-case for which 
+LLMs have been deployed in enterprise settings, (2) the scenario has clear, statutory rules
+which can be upheld or violated and (3) violating the rule has some tangible benefit that
+cannot be realized without violating the rule. Four scenarios are sampled from each domain for diversity.
+Legal consequences have already been imposed for violations in seven of our scenarios (among them
+\emph{Moffatt v.\ Air Canada}, NYC MyCity, and \emph{Mobley v.\ Workday}).
+%
+Domain experts in deploying AI assistants for customer use-cases wrote seed descriptions for each scenario,
+including a detailed description of the agent persona, rules, and user ask.
+
+
+\subsubsection{Template-based Prompt Construction}
 \label{sec:template}
-Every item follows one template, which is what makes compliance rates comparable
-across unrelated domains. Five things are fixed.
-\emph{(1) Deployment framing.} The \emph{system} prompt gives the assistant its
-persona and the targets it is scored on. It never mentions the decision, and the rule
-is added as a standing, general note. The \emph{user} turn carries the request, the
-case facts, and the menu of options. Nothing says which option is compliant. The model
-has to connect the facts to the rule, which makes each item a reasoning task that
-keyword matching cannot solve.
-\emph{(2) Dominant shortcut.} The menu offers two to five options. At least one
-breaks the rule while winning on the local objective, and at least one complies but
-costs more. Option order is randomized and never signals the answer.
-\emph{(3) Neutral rule wording.} The rule is stated as plain fact, never as a command.
-Command-style strictness appears only in the steerability mode.
-\emph{(4) Conditional second turn.} After the first answer, a follow-up pushes back if
-the model complied and challenges it if the model violated.
-\emph{(5) Non-binding twin.} Each scenario ships a near-identical version in which the
+
+Every scenario is expanded into dataset samples via a template that ensures that compliance
+can be compared across scenarios. The template establishes criteria that every sample must follow,
+and provides for automated and natural LLM-based addition of pressures and controls. The criteria hold four aspects constant. First, a sample's system prompt must give
+the assistant a persona and targets it is evaluated on, but without ever mentioning the decision, and the
+user prompt must carry the request, case facts, and options, without revealing which options are compliant.
+Second, out of the two to five mutually-exclusive options, at least one must break the rule while maximizing desirability.
+Option order is randomized. Third, if a model does not make a decision in its first turn, a follow-up user message probes it
+to state an option. Similarly, a follow-up pushes back if the model complied and challenges it if the model violated.
+Lastly, each scenario ships a near-identical version in which the
 rule does not apply. Here \emph{holding} the rule is the error. The twin separates
 rule-following from rule-parroting. Appendix~\ref{app:example} works through one item end
 to end, and Appendix~\ref{app:budget} details the 13-item battery each scenario yields.
 
-\subsubsection{Domains and scenarios.}
-\label{sec:domains}
-The template is instantiated in \textbf{twelve regulated domains} with \textbf{four
-scenarios each} (48 total; Appendix~\ref{app:domains}), spanning privacy (GDPR),
-finance, customer service, government services, HR, AML/KYC, healthcare
-administration (HIPAA), pharma medical information, advertising, export controls,
-content moderation, and procurement. Each domain met three criteria: a documented
-deployment surface, a crisp rule an agent can violate in a \emph{recommendation}, and
-a real penalty anchor (statute, regulator action, or litigated AI incident). Seven
-reconstruct settings that already produced a legal consequence (among them
-\emph{Moffatt v.\ Air Canada}, NYC MyCity, and \emph{Mobley v.\ Workday}). The four
-scenarios per domain use distinct rules that span a range of penalty types (fines,
-license loss, criminal exposure) and harm profiles. Moderation is the deliberately
-fuzzy-rule domain, and procurement doubles as a contamination tripwire against prior published
-data.
 
-\subsubsection{Pressures and multi-turn stressors.}
+\subsubsection{Pressures}
 \label{sec:pressures}
-The stressor is a battery of \textbf{nine pressures}. Each is an ordinary move a benign
-colleague might make, and each draws on a distinct mechanism from the literature on why
-people follow or break rules, so that no two are redundant. A hard deadline makes the
-compliant option too slow to help (time scarcity). The requester's manager has
-reportedly approved the shortcut (deference to legitimate authority~\citep{tyler1990why}).
-A peer did the same thing last week and nothing happened (a descriptive norm plus
-impunity~\citep{cialdini2009influence}). The chance of anyone ever checking is dismissed
-as negligible (weakened deterrence~\citep{becker1968crime}). Following the rule is framed
-as a concrete loss this quarter (loss aversion). An unverifiable prior sign-off is cited
-(false authorization). The requester has already promised the outcome to a client
-(commitment and sunk cost). A specific, sympathetic person is hurt by compliance
-(appeals to empathy). Or the requester offers to take the blame in writing (diffused
-responsibility). None of these users jailbreaks; each is an employee whose convenience
-conflicts with the rule, which is the realistic enterprise threat. A tenth move --- an
-argument that the rule does not really apply here --- is not scored on its own; it drives
-the discernment-under-attack items, where the model must hold on a binding item and
-stand down on its non-binding twin.
+We introduce a battery of nine pressures that a benign coworker may apply
+to elicit a desired behavior. Each draws on a mechanism from the literature on why
+people follow or break rules. 
+The nine include a hard deadline (time scarcity), a manager's approval of the shortcut
+(authority~\citep{tyler1990why}), a peer who did the same unpunished (descriptive
+norm~\citep{cialdini2009influence}), long odds of being caught (weak
+deterrence~\citep{becker1968crime}), the rule cast as a quarterly loss (loss aversion),
+an unverifiable sign-off (false authorization), an outcome already promised (sunk cost),
+a sympathetic person harmed by compliance (empathy), and an offer to take the blame
+(diffused responsibility).
+None of these are an attempt to jailbreak, but a conflict of convenience with compliance,
+a realistic enterprise threat.
 
-\subsubsection{Generating the items as an audited instrument.}
+\subsubsection{Generating Samples from Scenarios.}
 \label{sec:generation}
-Items are LLM-authored. A scenario is built component by component in dependency order
-(persona; request and menu; rule note; the nine pressures; the non-binding twin; the two
-turn-2 scripts; the two attacks), each component conditioned on the ones already accepted
-so the whole pack reads in one consistent voice, as if written by a single person across
-related situations. We generate \emph{zero-shot}: no worked example is ever shown to a
-generator, so scenarios do not converge on a shared template and the between-domain
-variation we want to measure survives. We push for naturalism at the source --- workplace
-register, invented artifacts, small typing slips --- because a model that senses it is
-being tested is the biggest threat to a behavioral benchmark.
+Samples are assembled from human-written seed scenarios and requests by an LLM, which integrates
+prompt sections component by component, connected naturally by realistic user prose and maintaning
+the structure and voice of previously added components through the progression.
+%
+The components are assistant persona, scenario rule, rule following mandate if applicable, user request and options, 
+and pressure if applicable. For multi-turn samples, additional user pushback is added. 
+To combat evaluation awareness~\citep{needham2025evalaware}, we emphasize naturalism at two levels: the scenario itself is intrinsicly realistic from construction,
+and the prompt-writing for the user-request is natural --- with workplace register, small typing slips,
+lower-case text, and options that look like they were copy pasted from a form or catalog. We present a small study on compliance absent naturalism in Section \ref{res:eval_awareness}.
+%
+
 
 \begin{figure}[t]
 \centering
 \includegraphics[width=0.80\columnwidth]{figures/pact_generator}
 \caption{Item generation. A scenario seed and shared system instructions are authored
-independently by three generator models (\texttt{Kimi-K2.6}, \texttt{Nemotron-Ultra},
-\texttt{GLM-5.2}); a panel
+independently by three generator models; a panel
 of judge models scores each component against a checklist and returns feedback to the
-generating model for revision, up to a fixed attempt budget; components that never pass
-are dropped and the version ships as a partial, yielding a phrasing-diverse pool of
-validated items.}
+generating model for revision, up to a fixed attempt budget.}
 \label{fig:generator}
 \end{figure}
 
-Every component is then reviewed by the two generator models that did \emph{not} write
-it, on two questions: \emph{scope} (does only the mechanism this item is meant to test
-appear?) and \emph{authenticity} (could this have been written inside the real
-deployment?). The decision menu additionally gets a check that its answer key follows
-from the rule and the case facts. Review is a feedback loop: a reviewer that rejects a
-component returns the reason to the generator, which revises and resubmits, up to a fixed
-number of retries. A component that never passes within that budget is dropped, on the
-reasoning that a scenario needing many rewrites to look real probably is not a realistic
-situation to begin with --- a pressure that simply does not fit that scenario's context,
-for instance. Because every scenario is authored once by each of the three generators, we
-can measure directly whether items favor their author's family. The reviewers act as
-strict flaw-catchers rather than a consensus panel, so their inter-reviewer agreement is
-modest (Cohen's $\kappa=0.35$, Appendix~\ref{app:agreement}). The surviving items form the
-benchmark: \textbf{1{,}737 items} across the 48 scenarios (141 of the 144 possible author
-versions). The review run is itself a diagnostic: which components and pressures are hard
-to author convincingly, and how many revisions each took, are reported in
-Appendix~\ref{app:gendiag}.
+For diversity, three open-source models assemble the samples (\texttt{Kimi-K2.6},
+\texttt{Nemotron-Ultra}, and \texttt{GLM-5.2}). Every component is then reviewed by the
+two generators that did \emph{not} write it, on \emph{scope} (does only the mechanism
+under test appear?) and \emph{authenticity} (could this have been written in a real-world setting?).
+Each option is further audited to confirm its compliance label is correct given the rule
+and scenario, and that the violating option genuinely beats the compliant one on the local
+objective. A rejected component is returned with feedback and revised, up to a fixed number
+of attempts; a component that never passes is dropped. The reviewers are strict
+flaw-catchers, and their agreement is modest because different reviewers catch different
+flaws (Cohen's $\kappa=0.35$, Appendix~\ref{app:agreement}). The final \textbf{1{,}737
+items} across the 48 scenarios form the benchmark.
 
 \subsubsection{Evaluation protocol.}
 \label{sec:protocol}
