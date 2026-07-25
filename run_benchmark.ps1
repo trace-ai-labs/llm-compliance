@@ -106,7 +106,8 @@ if ($Aggregate) {
     # Stage 5 - six axes, cross-fitted CVaR rollup + CIs, contrasts, gates, figures.
     python -m src.benchmark.aggregate --figures
     python -m src.benchmark.judges plot-taxonomy
-    Write-Host "outputs: metrics_v2.csv|.md, cells_v2.csv, contrasts_v2.csv, figures/*.png"
+    python -m src.benchmark.distributions   # domain x axis, pressure, domain x pressure heatmap
+    Write-Host "outputs: metrics_v2.csv|.md, cells_v2.csv, contrasts_v2.csv, dist_*.csv, figures/*.png"
 }
 
 if ($Dashboard) {
