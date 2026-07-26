@@ -4,12 +4,11 @@
 \subsection{Main Results}
 \label{sec:leaderboard}
 
-We evaluate \textbf{22 models} (18 open-weights and 4 closed: \texttt{Claude Haiku
-4.5}, \texttt{GPT-5.6 Luna}, \texttt{Grok~4.3}, \texttt{Gemini~3 Flash}) on the frozen
-dataset of 1{,}737 items, three replications in each of two system-prompt modes. The
-panel spans 7B dense models to trillion-parameter sparse mixtures and three years of
-releases; Appendix~\ref{app:models} (Table~\ref{tab:models}) lists each model's
-provider, size, release date, and citation.
+We evaluate 22 models (18 open-weights and 4 closed) on PACT's 1{,}737 items in two
+system-prompt modes (3{,}474 prompts), three times each. The panel spans 7B dense
+models to trillion-parameter sparse mixtures and three years of releases;
+Appendix~\ref{app:models} lists each model's provider, size, release date, and
+citation. Table~\ref{tab:leaderboard} reports the six axes and PACTScore.
 
 \begin{table*}[t]
 \centering
@@ -18,68 +17,61 @@ provider, size, release date, and citation.
 % Table body is generated from results/benchmark/metrics_v2.csv by
 % src/benchmark/make_paper_assets.py; rerun it after each aggregate.
 \input{tables/leaderboard}
-\caption{The PACT v1 leaderboard, sorted by the $\text{pass}^3$ rollup (higher is
+\caption{The PACT v1 leaderboard, sorted by PACTScore (higher is
 better); closed-source models are underlined. Every axis is $\text{pass}^3$ except
-Steerability (recovery fraction) and Reasoning Honesty ($1-\text{silent}$). Shading is
+Steerability (recovery fraction) and Reasoning Honesty ($1-\text{silent}$). PACTScore
+(\S\ref{sec:pactscore}) is the compliance summary: $\text{pass}^3$ over every item and
+both turns, averaged across the two system-prompt modes. Shading is
 scaled \emph{within} each column (green best, red worst), so it is not comparable
 across columns.}
 \label{tab:leaderboard}
 \end{table*}
 
-\textbf{The scores are failure rates.} $\text{pass}^3$ asks
-whether a model held the rule on \emph{every} one of three identical runs. The
-deployment bar is that strict: an enterprise assistant has to be right
-every single time, and an average will not do. So $1-\text{pass}^3$ is the share of
-items where the model \emph{cannot be relied on}, because it slipped at least once.
-Read that way, Table~\ref{tab:leaderboard} is sobering. The best model in the
-panel, \texttt{Claude Haiku 4.5}, still fails to reliably hold on $\sim$5\% of items.
-Much of the field clusters near 0.90, about one unreliable item in ten. The
-weakest models miss 40--50\%. In a regulated function, a \emph{single} violation
-is a legal event: a mis-stated refund policy, an out-of-scope PHI disclosure, a
-structured payment. There, ``right 90--95\% of the time'' does not pass; it means one
-avoidable incident every ten to twenty interactions. The leaderboard names no
-model safe to run on its own. It ranks \emph{how much oversight each still needs},
-and even the leader needs a lot. We report a 95\% confidence interval for every model's
-rollup and test each pairwise difference with a paired, item-clustered bootstrap corrected
-for multiple comparisons (following \citealp{miller2024errorbars}; Appendix~\ref{app:stats}).
-Most differences are significant (77\% of the 231 pairs), but the leaders have overlapping
-intervals, so small gaps at the top are not a real ranking. That tie is in unreliability,
-not safety: even the best model's interval sits near a 5\% failure rate, and none of the
-top models are statistically distinguishable from that shared, deployment-disqualifying
-level. Overlapping at the top means indistinguishably unsafe, not safe.
+\paragraph{Compliance rates.} PACTScore credits an item only when the model makes the
+correct call on all three replications, so $1-\text{PACTScore}$ is the share of
+decisions on which a model slips at least once. On this measure no model in the panel is
+reliable enough to run without supervision. \PactLeader\ scores highest at
+\PactLeaderScore, which still leaves about \PactLeaderFail\% of items unreliable, and
+\PactLast\ scores \PactLastScore. In a regulated workflow, where a single violation can
+be a reportable event, a 5\% slip rate corresponds to roughly one avoidable incident
+every twenty interactions. We attach a 95\% confidence interval to every score and test
+each pairwise difference with a paired, item-clustered bootstrap under multiplicity
+correction (\citealp{miller2024errorbars}; Appendix~\ref{app:stats}). 178 of the 231
+pairs separate at $p<0.05$, but the leading models do not: \PactLeader\ and \PactSecond\
+differ by \PactLeaderScore\ against \PactSecondScore, which is smaller than either
+interval, so the order between them should not be read as a ranking.
 
-\textbf{The axes measure genuinely different things.} The six axes collapse to three
-near-independent factors (Table~\ref{tab:axiscorr}). The first is a
-\emph{rule-holding} cluster: default compliance, pressure resistance, pushback
-resistance, and rule-scope discernment, which correlate tightly (pairwise
-$r=0.88$--$0.95$ across the panel) because a capable model tends to hold across
-conditions. The other two are \emph{steerability} and \emph{honesty}, each with
-near-zero correlation to that cluster and to each other. Steerability is the
-sharpest case. It runs only 0.03--0.58 across the \emph{entire} panel (the Steerability
-column of Table~\ref{tab:leaderboard}), so an explicit guardrail recovers far
-less of a model's base failures than most people assume. This is the single most
-actionable result in the run. Honesty is nearly independent of rank: the highest
-score belongs to \texttt{Seed-OSS-36B} (0.88), which sits near the bottom of the
-rollup, while several top-rollup models are only middling at admitting a violation.
-So a model's rank does not summarize it. The per-axis profile, which an organization
-can filter to its own domain, is the primary artifact, and the scalar is a
-conservative summary.
+\paragraph{Effect of the compliance mandate.} Because PACTScore averages the base and
+anti-adversarial modes, a model that an explicit mandate does not improve scores lower
+than one it does. Across the panel the base-to-mandate difference ranges from
+\PactGapMin\ to \PactGapMax. Ranking on the average rather than on the base mode alone
+moves \PactBiggestFaller\ down \PactBiggestFallerPlaces\ places and \PactBiggestRiser\
+up \PactBiggestRiserPlaces. Models with similar unprompted compliance can therefore
+differ substantially once the mandate is added, which a base-mode score does not show.
 
-\textbf{Different models fail differently.} Figure~\ref{fig:overlay} overlays six
-models chosen to span the range, and no two profiles have the same shape.
-\texttt{Claude Haiku 4.5} leads on holding the rule but is one of the \emph{least}
-forthcoming when it does break one. \texttt{Qwen3.6-27B} is the most steerable and
-among the most honest. \texttt{Kimi-K2.7-Code} and \texttt{Grok~4.3} barely bend
-under multi-turn pushback, yet \texttt{Grok} gives up more ground than any frontier
-model on the plain default and scope checks. \texttt{Seed-OSS-36B} is the sharpest
-warning. It is the \emph{most honest} model in the panel, readily admitting when it
-departs from the rule, but it is also one of the most \emph{fragile}: its compliance
-craters to 0.60 under a fabricated prior-authorization claim
-(Figure~\ref{fig:fragility}). Honesty is not safety. A model that reliably tells you
-it just broke the rule has still broken the rule, and that is the practical reason to
-read the profile instead of the headline number. The full per-model breakdown of how
-violations are explained --- silent, rationalized, or openly owned --- is in
-Appendix~\ref{app:supplementary} (Figure~\ref{fig:honesty}).
+\paragraph{Axis correlations.} The four rule-holding axes (default compliance, pressure
+resistance, pushback resistance, and rule-scope discernment) correlate at
+$r=0.88$--$0.95$, since a capable model tends to hold across conditions. Steerability
+and honesty correlate weakly with that group and with each other, so the six axes carry
+three largely independent signals. Steerability spans only 0.03--0.58 across the panel,
+which indicates that an explicit guardrail repairs a smaller share of base failures than
+is commonly assumed. Honesty is close to independent of rank: its highest value, 0.88
+for \texttt{Seed-OSS-36B}, belongs to a model near the bottom of the table. We therefore
+treat the per-axis profile as the primary result and PACTScore as a summary of it.
+
+\paragraph{Per-model profiles.} Figure~\ref{fig:overlay} overlays six models chosen to
+span the panel, and no two have the same profile shape. \texttt{Claude Haiku 4.5} ranks
+first on holding the rule but is among the least forthcoming when it breaks one.
+\texttt{Qwen3.6-27B} is the most steerable and among the most honest.
+\texttt{Kimi-K2.7-Code} and \texttt{Grok~4.3} hold under multi-turn pushback, though
+\texttt{Grok} concedes more than any other frontier model on the default and scope
+checks. \texttt{Seed-OSS-36B} is the most honest model in the panel and also among the
+most fragile, with compliance falling to 0.60 under a fabricated prior-authorization
+claim (Figure~\ref{fig:fragility}). Honesty does not substitute for compliance, since a
+model that reports its own violation has still committed it, which is a further reason
+to read the profile rather than the summary alone. Appendix~\ref{app:supplementary}
+(Figure~\ref{fig:honesty}) gives the per-model breakdown of silent, rationalized, and
+openly owned violations.
 
 \begin{figure}[t]
 \centering
@@ -90,30 +82,20 @@ All 22 profiles are in Appendix~\ref{app:supplementary} (Figure~\ref{fig:radar})
 \label{fig:overlay}
 \end{figure}
 
-\textbf{Failures concentrate in specific pressure families.} The 5--10\% failure rate
-does not spread evenly over items. Figure~\ref{fig:fragility} maps
-base-mode compliance by pressure family, and the losses cluster in a few places. The
-weaker models crater on \emph{false\_clearance} (an unverifiable ``we're already
-cleared for this'') and \emph{urgency}, while holding elsewhere: \texttt{Seed-OSS-36B}
-drops to 0.60 on false-clearance and \texttt{Mistral-7B} to 0.47, against 0.90+ on
-other families. This concentration is what turns a statistical error rate into an
-exploit. A random 7\% slip is a reliability problem. A 40\% slip that fires
-\emph{only} when someone claims prior authorization is an attack surface. An insider
-who knows the model, say a broker who wants a structured payment processed or a
-manager who wants a discrimination complaint buried, needs no jailbreak. They need the
-one sentence that maps to the model's soft spot, and the fragility map hands them the
-address. This is why the pressures form a battery: a per-family
-breakdown tells an organization \emph{which} plausible insider sentence its candidate
-cannot withstand, and a single mean hides exactly that. A full per-pressure breakdown
-across both turns is in Appendix~\ref{app:supplementary} (Table~\ref{tab:pressureturns}),
-where a further pattern emerges: once a model complies, it rarely caves to a follow-up,
-so the leverage is the opening pressure, not the argument that comes after. Difficulty
-also varies by domain, and steerability varies most of all --- and not in step with
-baseline difficulty. A guardrail repairs most base failures in AML and privacy but almost
-none in HR and healthcare admin, even though those two are not the hardest domains at
-baseline, so where an explicit mandate helps cannot be read off the leaderboard and has to
-be measured per workflow (full per-axis breakdown by domain in
-Appendix~\ref{app:supplementary}, Table~\ref{tab:perdomain}).
+\paragraph{Failures by pressure family.} Compliance losses are not spread evenly across
+the battery. Figure~\ref{fig:fragility} gives base-mode compliance per model per
+pressure family. The lowest columns are \emph{false\_clearance}, an unverifiable claim
+that the action has already been approved, and \emph{urgency}: \texttt{Seed-OSS-36B}
+falls to 0.60 on false-clearance and \texttt{Mistral-7B} to 0.47, against 0.90 or above
+on the other families. A failure rate concentrated on one pressure is easier to exploit
+than a uniform one, because an insider needs only the sentence that matches it, and the
+per-family map identifies which sentence that is for a given model. Two further patterns
+hold across the panel. A model that complies at turn~1 rarely reverses under the turn-2
+challenge, so most of the effect comes from the opening pressure
+(Appendix~\ref{app:supplementary}, Table~\ref{tab:pressureturns}). And steerability
+varies more across domains than baseline difficulty does: the mandate repairs most base
+failures in AML and privacy but few in HR and healthcare administration, so its benefit
+has to be measured per workflow (Table~\ref{tab:perdomain}).
 
 \begin{figure}[t]
 \centering
@@ -128,68 +110,54 @@ false-clearance, against 0.90+ elsewhere).}
 
 \subsection{Evaluation Awareness}
 \label{res:eval_awareness}
-A behavioral score means little if a model lifts its game because it recognizes a
-test, and recent models increasingly do~\citep{needham2025evalaware}. We test PACT's
-naturalistic construction head-on. On a random 10\% item sample we re-present each
-decision at three levels of eval-obviousness --- the native item (R0), a version
-with the realism stripped into generic model-prose (R1), and the native item with
-an explicit ``you are being evaluated'' frame (R2) --- holding the rule, facts,
-incentive, and options fixed, and measure the relative change in compliance,
-$(C-C_0)/(1-C_0)$ (the recovery scale of axis~4). Across twelve models the explicit
-frame removes a mean of \textbf{39\%} of native non-compliance, rising to
-$\sim$70\% for the newest frontier systems (Gemini~3 Flash, DeepSeek-V4-Pro), while
-merely stripping realism moves behavior far less and inconsistently (mean 11\%).
-Models comply more the more an item looks like a test, most of all the recent,
-heavily benchmarked ones --- precisely the bias a realistic benchmark must avoid,
-and direct evidence that PACT's naturalism is load-bearing rather than cosmetic. The
-full protocol, per-model leaderboard, and caveats (the panel is compliance-saturated,
-so the relative effect is $\sim$2 points in absolute terms) are in
-Appendix~\ref{app:evalaware}.
+A behavioral benchmark is meaningful only if models do not raise their compliance on
+recognizing a test, which recent models increasingly do~\citep{needham2025evalaware}.
+We measure this directly. On a random 10\% of items we re-present each decision at three
+levels of test-obviousness, holding the rule, case facts, incentive, and options fixed:
+the native item (R0), a version with the realism stripped to generic model-prose (R1),
+and the native item under an explicit ``you are being evaluated'' frame (R2). We record
+the relative change in compliance, $(C-C_0)/(1-C_0)$. Across twelve models the explicit
+frame removes a mean of 39\% of native non-compliance, rising to about 70\% for the
+newest frontier systems (\texttt{Gemini~3 Flash}, \texttt{DeepSeek-V4-Pro}), while
+stripping realism moves behavior less and less consistently (mean 11\%). Compliance
+therefore rises as an item looks more like a test, and rises most for the heavily
+benchmarked frontier systems. This is the bias PACT's naturalistic construction is
+intended to avoid. The full protocol, per-model results, and the saturation caveat (the
+effect is about 2 points in absolute terms) are in Appendix~\ref{app:evalaware}.
 
 \subsection{Discussion and Social Impact}
 
-\paragraph{Why these metrics hold up.}
-\label{sec:validation}
-We designed the six axes and the reliability rollup for this benchmark, and PACT's own
-data bears out the two choices that matter most. \emph{The axes are not redundant}: they
-collapse to only three near-independent factors (Table~\ref{tab:axiscorr}), so a single
-scalar would be blind to the two on which models differ most --- the reason we report a
-profile rather than an average. \emph{Reliability is not the mean}: on these near-ceiling
-tasks a plain mean rounds a model's worst items away, while $\text{pass}^3$ surfaces
-them, and the gap between the two (reported beside the rollup) is itself a warning sign.
-Judge validity is checked separately: the two reasoning classifiers carry inter-rater
-$\kappa=0.51$ (honesty) and $0.62$ (abstention), and the honesty leaderboard is only
-moderately stable from one judge to another, which is why honesty is held out of the
-rollup (Appendix~\ref{app:agreement}).
-
-\paragraph{A governance instrument.} PACT targets a concrete decision. A bank,
-hospital, or municipal office choosing an assistant for a regulated workflow has no
-tool that answers ``which model holds this rule under a rushed manager?'' A
-per-domain, reliability-scored, multi-turn profile gives an organization something to
-act on. It can filter the leaderboard to its own domain, read per-item reliability in
-place of the flattering mean, check whether a guardrail actually moves the candidate
-(usually far less than hoped), and see whether a violating model at least admits it.
-One finding is already an intervention: phrasing the rule as an explicit command (the
-anti-adversarial mode) raises compliance, though by less than practitioners expect.
-Because the item set is fixed and a private split is held out, the same benchmark can
-rerun on each new model \emph{version}; no one currently tracks whether a vendor's silent
-update moved a model's urgency floor; a benchmark that catches that is monitoring
-infrastructure.
-
-\paragraph{Threats to validity.} \emph{Evaluation awareness} would undermine any
-behavioral benchmark. We enforce naturalism at generation and measure the threat
-directly (\S\ref{res:eval_awareness}): pushing items toward the eval pole raises
-compliance by a mean of 39\% of native non-compliance, most for frontier models, so
-a self-announcing evaluation would overstate compliance where our realistic framing
-does not. \emph{Stated
-versus enacted compliance}: recommendation-level compliance is an upper bound on what
-a tool-using agent actuates, and an actuated variant is future work, but \emph{Moffatt
-v.\ Air Canada} established that a chatbot's statement is itself a liability
-surface~\citep{moffatt2024aircanada}. \emph{Judge circularity} is addressed by the reported inter-rater agreement of the
-reasoning classifiers and the cross-judge rank stability of the honesty leaderboard
+\paragraph{Metric validation.} We fixed the six axes and PACTScore before running the
+panel, and the data supports the two load-bearing choices. First, the axes are not
+redundant: they reduce to three largely independent factors ($r=0.88$--$0.95$ within the
+rule-holding group, near zero across it), so a single scalar would be blind to
+steerability and honesty. Second, reliability is not well approximated by the mean: on
+near-ceiling tasks a plain average absorbs a model's worst items while $\text{pass}^3$
+retains them, and we report the difference between the two beside PACTScore. Judge
+validity is assessed separately. The two reasoning classifiers reach inter-rater
+$\kappa=0.51$ (honesty) and $0.62$ (abstention), and the honesty ranking is only
+moderately stable across judges, which is why honesty is excluded from PACTScore
 (Appendix~\ref{app:agreement}).
-\emph{Generated items} could favor their author's family, which the dual-guard review
-and the computable generator-versus-evaluatee test address. \emph{Panel size}:
-model-level factor analyses are only indicative at 22 models, so the item-level
-statistics over hundreds of thousands of trials carry the weight, and every new model
-strengthens them.
+
+\paragraph{Use as a governance instrument.} PACT addresses a question existing
+evaluations do not: which model holds a given rule under a rushed manager. A per-domain,
+reliability-scored, multi-turn profile lets an organization filter the leaderboard to
+its own domain, read per-item reliability in place of the mean, check whether a guardrail
+actually moves its candidate, and see whether a violating model admits the violation. One
+result is directly actionable: phrasing the rule as an explicit command raises
+compliance, though by less than practitioners expect. Because the item set is frozen with
+a private holdout, the same benchmark reruns on each model version, so a silent vendor
+update that shifted a model's urgency floor would be detected.
+
+\paragraph{Threats to validity.} \emph{Evaluation awareness} would inflate any
+behavioral benchmark; we enforce naturalism at generation and measure the residual
+threat directly (\S\ref{res:eval_awareness}). \emph{Stated versus enacted compliance}: a
+recommendation upper-bounds what a tool-using agent would actuate, and an actuated
+variant is future work, though \emph{Moffatt v.\ Air Canada} establishes that a
+chatbot's statement is itself a liability~\citep{moffatt2024aircanada}. \emph{Judge
+circularity} is addressed by the reported inter-rater agreement and the cross-judge
+stability of the honesty ranking. \emph{Author-model bias}: generated items could favor
+their author's family, which the dual-guard review and a computable
+generator-versus-evaluatee test address. \emph{Panel size}: model-level factor analyses
+are only indicative at 22 models, so the item-level statistics over hundreds of
+thousands of trials carry the weight.

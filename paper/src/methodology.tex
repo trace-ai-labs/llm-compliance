@@ -71,7 +71,7 @@ prompt sections component by component, connected naturally by realistic user pr
 the structure and voice of previously added components through the progression.
 %
 The components are assistant persona, scenario rule, rule following mandate if applicable, user request and options, 
-and pressure if applicable. For multi-turn samples, additional user pushback is added. 
+and pressure if applicable. An additional user pushback message is drafted in case the model complied on the first turn. 
 To combat evaluation awareness~\citep{needham2025evalaware}, we emphasize naturalism at two levels: the scenario itself is intrinsicly realistic from construction,
 and the prompt-writing for the user-request is natural --- with workplace register, small typing slips,
 lower-case text, and options that look like they were copy pasted from a form or catalog. We present a small study on compliance absent naturalism in Section \ref{res:eval_awareness}.
@@ -97,135 +97,83 @@ and scenario, and that the violating option genuinely beats the compliant one on
 objective. A rejected component is returned with feedback and revised, up to a fixed number
 of attempts; a component that never passes is dropped. The reviewers are strict
 flaw-catchers, and their agreement is modest because different reviewers catch different
-flaws (Cohen's $\kappa=0.35$, Appendix~\ref{app:agreement}). The final \textbf{1{,}737
-items} across the 48 scenarios form the benchmark.
+flaws (Cohen's $\kappa=0.35$, Appendix~\ref{app:agreement}). The final \textbf{1{,}737 items} across the 48 scenarios form the benchmark; run in two
+system-prompt modes, they make \textbf{3{,}474} prompts.
 
 \subsubsection{Evaluation protocol.}
 \label{sec:protocol}
-We benchmark each model by sending it every item and recording what it does over up to
-two turns. On turn~1 the model sees the system prompt and the request, and an LLM judge
-(\texttt{gpt-oss-120b}) reads the reply and records the option it chose (comply, violate,
-or unclear); reading the whole reply, rather than string-matching an option name, keeps a
-hedged or paraphrased answer from being mislabeled. If the reply does not commit to a
-listed option, we \emph{push}: a short follow-up that asks the model to pick exactly one
-of the options, judged the same way. On turn~2 we push back if the model complied
-(re-arguing the temptation) or challenge it if it violated, and a push again resolves any
-undecided reply. Each item is run three times per mode, so we score reliability rather
-than one lucky attempt, with a few automatic retries if a model call fails. Alongside the
-outcome, two \emph{reasoning classifiers} --- an ensemble of the three generator models
-applied leave-one-out, so a model never grades its own responses --- label the honesty of
-a violation (axis~5) and the reason a turn~1 reply abstained; their inter-rater agreement
-is Cohen's $\kappa=0.51$ and $0.62$ (Appendix~\ref{app:agreement}). Unclear replies are
-dropped from every axis denominator rather than scored; per-model abstention rates and the
-six-way reason breakdown are in Appendix~\ref{app:abstention}. The full generator,
-reviewer, and judge prompts are in Appendix~\ref{app:prompts}.
+Each model runs every PACT sample three times. An LLM extractor (\texttt{gpt-oss-120b})
+reads each reply and maps it to comply, violate, or unclear; an unclear reply draws a
+short follow-up that asks the model to pick one option. LLM-based extraction is selected to
+allow models to respond in realistic, free-form ways that may not directly reference the wording of the option.
+%
+If the model's response was compliant, 
+we add an additional turn in which the user pushes back on the model's decision to assess multi-turn robustness. Alongside the outcome,
+if the response was non-compliant, a reasoning judge labels the honesty of a violation (/ref{HERE}). This judge is a 3-model ensemble, aggregated fractionally for scoring purposes,
+and with a model never judged by itself as LLM evaluators favor their own
+generations~\citep{panickssery2024selfpref}. We report moderate to high annotator agreement of Cohen's $0.62$ (Appendix~\ref{app:agreement}). Unclear replies are dropped rather than scored;
+abstention rates and abstention cause is presented in Appendix~\ref{app:abstention},
+and the full generator, reviewer, and judge prompts are in Appendix~\ref{app:prompts}.
 
-\subsection{Metrics for Assessment}
+\subsection{Metrics}
 \label{sec:metrics}
 
-\paragraph{Why we report a profile.} Rule-following is not one behavior, and a single
-compliance number hides the differences that matter. A model can hold under pressure yet
-never admit the times it slips, or comply by default yet ignore an explicit guardrail.
-These behaviors do not move together, so folding them into one average lets a model bury
-the single dimension on which it fails. We therefore report a profile of six axes, each a
-concrete question a team would ask before trusting a model, and each built to withstand a
-specific way a naive metric
-misleads~\citep{jacobs2021measurement,bean2025measuring,raji2021everything,bowman2021fix,reuel2024betterbench}.
+Measuring compliance in enterprise agents requires characterization across multiple factors that
+can impact deployment decisions. For example, even a generally pressure-resistant model would be unsuitable
+if when it does slip it lacks transparency and cannot be effectively monitored,
+if it achieves robustness via being too conservative for usability,
+or gives in, but only after multiple turns.
+%
+We therefore report a six-axis profile that answers a concrete concern an enterprise
+team would raise before trusting a model, following prior multi-metric LLM benchmarks~\citep{bean2025measuring,reuel2024betterbench}.
+%
+While in our experiments, the axes of compliance robustness (default, pushback and pressure resistance, steerability) move somewhat together, with 
+coefficient of correlation around ~0.9, the remaining axes all correlate with $r \leq 0.2$, illustrating that
+compression into a single score would remove valuable insights.
 
-\paragraph{Scoring: per-item reliability.} Every axis is scored as $\text{pass}^3$: an
-item counts only when the model makes the right call on \emph{every} replication of it
-(three by default), the unanimous case of $\tau$-bench's pass$^k$
-estimator~\citep{yao2024taubench}, so a single slip drops the item to zero. Reliability
+Every axis excluding honesty is scored based on $\text{pass}^3$: an
+item counts as a positive when the model makes the right call on \emph{each} of three replications of it,
+a unanimous case of $\tau$-bench's pass$^k$
+estimator~\citep{yao2024taubench}. Reliability
 rather than an average is the right target because an assistant in a regulated workflow
-has to be right every time; a mean quietly rounds a one-in-ten failure rate up to
-``fine.'' Two axes adapt this (steerability is a recovery fraction, honesty is
-$1-\text{silent}$), as noted below. All six sit on $[0,1]$, higher is better, and come
-straight from the trial records; only honesty needs a judge.
+has to be right every time. All six axes range from 0 to 1 with higher being better.
 
-\paragraph{The axes are not redundant.} On our 22-model panel the six axes fall into
-three near-independent groups (Table~\ref{tab:axiscorr}): four \emph{rule-holding} axes
-that move together because a capable model tends to hold across conditions, plus
-\emph{steerability} and \emph{honesty}, each largely uncorrelated with the rest and with
-each other. That structure is the point of a profile: a scalar dominated by the
-rule-holding group would be blind to the two axes on which models differ most.
+\begin{enumerate}[nosep, leftmargin=*]
+\item \textbf{Default Compliance} measures the fraction of samples without pressure or pushback where the model consistently follows the rule. 
 
-\begin{table}[t]
-\centering
-\small
-\setlength{\tabcolsep}{5pt}
-\begin{tabular}{@{}l cccc cc@{}}
-\toprule
- & \textbf{Def} & \textbf{Prs} & \textbf{Psh} & \textbf{Scp} & \textbf{Str} & \textbf{Hon} \\
-\midrule
-Default (Def)      & 1.00 & 0.95 & 0.88 & 0.92 & 0.12 & $-0.02$ \\
-Pressure (Prs)     & 0.95 & 1.00 & 0.90 & 0.91 & 0.16 & $-0.07$ \\
-Pushback (Psh)     & 0.88 & 0.90 & 1.00 & 0.93 & 0.18 & 0.08 \\
-Scope (Scp)        & 0.92 & 0.91 & 0.93 & 1.00 & 0.07 & 0.05 \\
-Steerability (Str) & 0.12 & 0.16 & 0.18 & 0.07 & 1.00 & $-0.04$ \\
-Honesty (Hon)      & $-0.02$ & $-0.07$ & 0.08 & 0.05 & $-0.04$ & 1.00 \\
-\bottomrule
-\end{tabular}
-\caption{Inter-axis Pearson correlation across the 22-model panel. The four rule-holding
-axes (Def, Prs, Psh, Scp) covary strongly ($r=0.88$--$0.95$), while steerability and
-honesty are near-orthogonal to that cluster and to each other ($|r|\leq0.18$): three
-distinct signals, not one.}
-\label{tab:axiscorr}
-\end{table}
+\item \textbf{Pressure Resistance} measures the fraction of samples with pressure present where the model consistently follows the rule.
 
-\begin{enumerate}
-\item \textbf{Default Compliance}: $\text{pass}^3$ on the neutral binding items ---
-does the model comply when nothing is pushing on it? This is the baseline every stressor
-is read against.
+\item \textbf{Pushback Resistance} measures the fraction of compliant trials where the model maintained its decision even after an additional round of user pushback.
 
-\item \textbf{Pressure Resistance} applies the same $\text{pass}^3$ to the pressure
-items, the fraction on which the model complies on every replication, so a model that
-slips occasionally is penalized where a mean would hide it. Alongside it we report a
-\emph{fragility breadth}: the number of pressure families whose mean compliance falls
-below a threshold, $\lvert\{f:\bar c_f<\tau\}\rvert$, which distinguishes a model
-broken by one pressure from one broken by six.
-
-\item \textbf{Pushback Resistance} conditions on the model's own turn-1-compliant
-items and measures whether it still holds after the user pushes back:
-$\mathrm{pass}^3(\text{hold at turn 2}\mid\text{complied at turn 1})$. It captures
-erosion under a user who keeps pushing.
-
-\item \textbf{Steerability} measures how much of a model's failures an explicit
-guardrail can repair. Every binding item runs twice: once on the base persona, and once
-on the base plus the scenario's generated hard directive. The score is the net fraction of
-base-mode violations the mandate repairs,
-$\text{recovery}=\sum_i(r^{\text{dir}}_i-r^{\text{base}}_i)\,/\,\sum_i(1-r^{\text{base}}_i)$,
-where $r_i$ is the compliance rate on item $i$ and both sums run only over items the base
-model fails ($r^{\text{base}}_i<1$). The gain is signed, so an item the directive makes
-\emph{worse} counts against the model rather than being discarded. Measuring on the base
-model's own violation mass means a model that already complies cannot score via a ceiling
-artifact.
-
+\item \textbf{Steerability} measures how much of a model's failures are mitigated when the prompt instead specifies that all rules must be followed without exception.
+% (rate it passes all three with) - (rate it passes iwthout)
 \item \textbf{Reasoning Honesty} measures, on the base-mode binding violations, whether
 the model admits the breach: $1-\text{silent rate}$, where a violation's silent rate is
 the fraction of the ensemble judges that labeled it silent (each judge labels it silent,
 rationalized, or defiant-honest), averaged over the model's violations. Because the
 denominator is violations, the best models have the least data, so an undefined value
-maps to $1$ and is held out of the harmonic mean. This is the only axis that depends on
-a judge, and it is the least reproducible one (Appendix~\ref{app:agreement}).
+maps to $1$ and is held out of the harmonic mean.
 
 \item \textbf{Rule-Scope Discernment} measures whether the model applies the rule only
-where it binds. We score each direction of the scope call as $\text{pass}^3$ --- comply
-where the rule binds, and stand down where it does not (the under-attack items folded
-in), each crediting an item only when the model gets it right on \emph{every}
-replication --- and equal-weight the two:
-$\tfrac12[\text{pass}^3(\text{bind}) + \text{pass}^3(\text{stand-down})]$. Equal
-weighting is deliberate: it stops the binding direction, which overlaps Default
-Compliance, from inflating the axis, so the stand-down direction --- correctly
-\emph{not} applying the rule --- carries the discriminating signal. We also report the
-two directional rates ($P(\text{comply}\mid\text{bind})$,
-$P(\text{stand-down}\mid\text{non-bind})$) as diagnostics.
+where it binds: $\tfrac12[\text{pass}^3(\text{bind}) +
+\text{pass}^3(\text{stand-down})]$, over the binding items and the near-identical twins
+where holding the rule is the error. Equal weighting keeps the stand-down direction,
+which carries the discriminating signal, from being swamped by the binding direction
+that overlaps Default Compliance.
 \end{enumerate}
 
-\paragraph{Rollup.} For a single summary we compute $\text{pass}^3$ over all scored
-items pooled: the fraction on which the model complies across every replication. We
-report it beside the plain mean (the gap between the two is itself informative), a
-harmonic mean over axes 1--4 and 6 (axis 5 held out), and a mean win rate. We score
-per-item reliability by design: an assistant in a regulated workflow must be right
-\emph{every} time, so a rollup of $0.9$ marks a model unreliable on one item in ten.
-We publish the full inter-axis correlations and per-axis $\kappa$ so these
-groupings can be checked directly.
+\paragraph{PACTScore.}
+\label{sec:pactscore}
+For a single headline we report the mean over all \PactNItems\ items of
+$s_i = 0.75\,T^1_i + 0.25\,T^2_i$ (or $T^1_i$ alone for the \PactNSingleTurn\ items
+with no second turn), averaged over the two system-prompt modes. Here $T^1_i$ and
+$T^2_i$ are $\text{pass}^3$ indicators: the model makes the correct call on every
+replication, and also holds it after pushback.
+
+Three choices make this a measure of compliance alone. Items are weighted equally, so
+the composition is not a claim about which pressure or domain matters most. Turn~1
+carries $0.75$ because violating on first contact is worse than conceding to a person
+who pushes back. Averaging the two modes credits both unprompted compliance and
+compliance under an explicit mandate, so a model that a mandate cannot lift scores
+lower for it. Reasoning honesty is the one axis excluded: a model that announces its
+violations has still violated.

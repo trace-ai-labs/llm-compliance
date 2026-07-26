@@ -70,6 +70,8 @@ def profile_all(trials: List[dict], honesty: Dict[str, str],
         st = M.steerability(cells, model)
         rh = M.reasoning_honesty(trials, honesty, honesty_votes, model)
         rd = M.rule_scope_discernment(cells, model)
+        pact = M.pact_score(trials, model)          # the headline
+        pact_ci = (None, None) if fast else M.pact_score_ci(trials, model)
         axes = {
             "default_compliance": M.default_compliance(cells, model),
             "pressure_resistance": pr.p3,
@@ -89,6 +91,8 @@ def profile_all(trials: List[dict], honesty: Dict[str, str],
                          if c.binds and c.decided]
         profiles[model] = {
             "axes": axes,
+            "pact": pact,
+            "pact_ci": pact_ci,
             "rollup": M.Rollup(
                 p3=M.pass_cubed(outs),
                 plain_mean=sum(rates) / len(rates) if rates else None,
@@ -213,7 +217,11 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
 
     with open(out_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["model"] + list(AXES)
+        w.writerow(["model", "pact_score", "pact_score_lo", "pact_score_hi",
+                    "pact_base", "pact_directed",
+                    "pact_steer_gap", "pact_base_t1", "pact_base_t2",
+                    "pact_n_items", "pact_n_items_t2", "pact_n_items_full",
+                    "pact_n_t2_missing"] + list(AXES)
                    + ["default_compliance_se", "pressure_p3_lo",
                       "pressure_p3_hi", "rollup_p3", "rollup_p3_lo",
                       "rollup_p3_hi", "plain_mean", "harmonic", "win_rate",
@@ -226,9 +234,20 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
             p = profiles[m]
             d = p["detail"]
             r = p["rollup"]
+            pact = p["pact"]
+            b, dr = pact.base, pact.directed
             ci = p.get("rollup_ci") or (None, None)      # None in --fast mode
             pci = d["pressure"].ci or (None, None)        # None when with_ci=False
-            w.writerow([m] + [p["axes"][a] for a in AXES] + [
+            pci_lo, pci_hi = p.get("pact_ci") or (None, None)
+            w.writerow([m, pact.value, pci_lo, pci_hi,
+                        b.value if b else None, dr.value if dr else None,
+                        pact.steer_gap,
+                        b.t1 if b else None, b.t2 if b else None,
+                        b.n_items if b else None,
+                        b.n_items_t2 if b else None,
+                        b.n_items_full if b else None,
+                        b.n_t2_missing if b else None]
+                       + [p["axes"][a] for a in AXES] + [
                 p.get("default_compliance_se"),
                 pci[0], pci[1],
                 r.p3, ci[0], ci[1],
@@ -264,17 +283,22 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
     corr = M.correlation_matrix(axis_values)
 
     with open(out_md, "w", encoding="utf-8") as f:
-        f.write("# PACT — Metrics 2.0\n\n")
-        f.write("| model | " + " | ".join(a.replace("_", " ") for a in AXES)
+        f.write("# PACT — Metrics 2.0 (sorted by PACTScore)\n\n")
+        f.write("| model | PACTScore | base | directed | "
+                + " | ".join(a.replace("_", " ") for a in AXES)
                 + " | rollup pass^3 [95% CI] | mean | harmonic | win rate |\n")
-        f.write("|" + "---|" * (len(AXES) + 5) + "\n")
-        for m in models:
+        f.write("|" + "---|" * (len(AXES) + 8) + "\n")
+        for m in sorted(models, key=lambda m: -(profiles[m]["pact"].value or 0.0)):
             p = profiles[m]
             r = p["rollup"]
+            pact = p["pact"]
+            pb, pd = pact.base, pact.directed
             lo, hi = p.get("rollup_ci") or (None, None)
             ci_txt = (f" [{_fmt(lo)}, {_fmt(hi)}]"
                       if lo is not None and hi is not None else "")
-            f.write(f"| {m} | "
+            f.write(f"| {m} | {_fmt(pact.value)} "
+                    + f"| {_fmt(pb.value if pb else None)} "
+                    + f"| {_fmt(pd.value if pd else None)} | "
                     + " | ".join(_fmt(p["axes"][a]) for a in AXES)
                     + f" | {_fmt(r.p3)}{ci_txt} | {_fmt(r.plain_mean)}"
                     + f" | {_fmt(r.harmonic)} | {_fmt(r.win_rate)} |\n")
@@ -612,10 +636,24 @@ def main() -> None:
     write_cells_csv(cells, args.cells_csv)
 
     models = [m for m in sorted(profiles) if m != "_meta"]
-    print(f"\n{'model':<38} " + " ".join(f"{a[:9]:>9}" for a in AXES))
-    for m in models:
+    print(f"\n{'model':<38} {'PACT':>7} {'base':>7} {'direct':>7}  "
+          + " ".join(f"{a[:9]:>9}" for a in AXES))
+    for m in sorted(models, key=lambda m: -(profiles[m]["pact"].value or 0.0)):
+        pact = profiles[m]["pact"]
+        b, dr = pact.base, pact.directed
         vals = " ".join(f"{_fmt(profiles[m]['axes'][a]):>9}" for a in AXES)
-        print(f"{m:<38} {vals}")
+        print(f"{m:<38} {_fmt(pact.value):>7} {_fmt(b.value if b else None):>7} "
+              f"{_fmt(dr.value if dr else None):>7}  {vals}")
+    # PACTScore integrity: both arms present, and T2 coverage complete
+    for m in models:
+        pact = profiles[m]["pact"]
+        if set(pact.per_arm) != set(M.PACT_ARMS):
+            print(f"  [!] {m}: PACTScore averaged over {sorted(pact.per_arm)} only "
+                  f"- NOT comparable to a model scored on both arms")
+        b = pact.base
+        if b and b.n_t2_missing:
+            print(f"  [!] {m}: {b.n_t2_missing} multi-turn items have no T2 outcome "
+                  f"(scored turn-1-only) - T2 coverage incomplete")
     for warn in gameability_check(profiles):
         print(f"  [!] {warn}")
     for warn in power:
