@@ -195,12 +195,12 @@ def plot_steer_baseline(da: Dict[str, Dict[str, Optional[float]]], path: str) ->
 
 
 def significance_summary(contrasts_path: str, metrics_path: str) -> dict:
-    """Read the BH-adjusted pairwise contrasts and the rollup ranking; report how
-    many pairs differ significantly and the size of the top indistinguishable
-    cluster (models not significantly below the best on the rollup)."""
+    """Read the BH-adjusted pairwise contrasts and the PACTScore ranking; report
+    how many pairs differ significantly and the size of the top indistinguishable
+    cluster (models not significantly below the best)."""
     with open(metrics_path, encoding="utf-8") as f:
-        met = {r["model"]: float(r["rollup_p3"]) for r in csv.DictReader(f)
-               if r.get("rollup_p3") not in ("", None)}
+        met = {r["model"]: float(r["pact_score"]) for r in csv.DictReader(f)
+               if r.get("pact_score") not in ("", None)}
     order = sorted(met, key=lambda m: -met[m])
     with open(contrasts_path, encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
@@ -212,11 +212,11 @@ def significance_summary(contrasts_path: str, metrics_path: str) -> dict:
     cluster = [top] + [m for m in order[1:]
                        if pbh.get(frozenset((top, m)), 0.0) >= 0.05]
     return {"n_pairs": len(rows), "n_sig": n_sig, "top": top,
-            "cluster": cluster, "order": order, "rollup": met}
+            "cluster": cluster, "order": order, "pact": met}
 
 
-def plot_rollup_ci(metrics_path: str, path: str) -> None:
-    """Caterpillar plot: rollup point estimate with 95% CI for every model,
+def plot_pact_ci(metrics_path: str, path: str) -> None:
+    """Caterpillar plot: PACTScore point estimate with 95% CI for every model,
     ordered best-first. The dashed line marks the best model's lower CI bound;
     any interval crossing it is not separable from the top at the margin, which
     is why the ranking's head is a cluster, not a single winner. (The rigorous
@@ -225,21 +225,21 @@ def plot_rollup_ci(metrics_path: str, path: str) -> None:
     FS.use_paper_style()
     with open(metrics_path, encoding="utf-8") as f:
         rows = [r for r in csv.DictReader(f)
-                if r.get("rollup_p3_lo") not in ("", None)]
-    rows.sort(key=lambda r: float(r["rollup_p3"]))
-    best_lo = float(max(rows, key=lambda r: float(r["rollup_p3"]))["rollup_p3_lo"])
+                if r.get("pact_score_lo") not in ("", None)]
+    rows.sort(key=lambda r: float(r["pact_score"]))
+    best_lo = float(max(rows, key=lambda r: float(r["pact_score"]))["pact_score_lo"])
     ys = range(len(rows))
     fig, ax = plt.subplots(figsize=(6.6, 7.2))
     for y, r in zip(ys, rows):
-        v = float(r["rollup_p3"])
-        lo, hi = float(r["rollup_p3_lo"]), float(r["rollup_p3_hi"])
+        v = float(r["pact_score"])
+        lo, hi = float(r["pact_score_lo"]), float(r["pact_score_hi"])
         col = FS.BLUE if hi >= best_lo else FS.MUTED
         ax.plot([lo, hi], [y, y], color=col, lw=1.6, zorder=2)
         ax.scatter([v], [y], color=col, s=30, zorder=3)
     ax.set_yticks(list(ys))
     ax.set_yticklabels([FS.short(r["model"]) for r in rows], fontsize=8)
-    ax.set_xlabel(r"Rollup $\mathrm{pass}^3$")
-    ax.set_title("Rollup with 95% confidence intervals (two-stage bootstrap)")
+    ax.set_xlabel("PACTScore")
+    ax.set_title("PACTScore with 95% confidence intervals (item-cluster bootstrap)")
     ax.axvline(best_lo, color=FS.RED, ls="--", lw=0.9, alpha=0.7, zorder=1)
     ax.grid(True, axis="x", alpha=0.3)
     fig.savefig(path, bbox_inches="tight")
@@ -285,12 +285,12 @@ def main() -> None:
     print(f"\n  r(domain default, steerability) = {_pearson(dd, ss):+.2f}  "
           f"(headroom would predict a negative slope)")
 
-    # 5. rollup CIs + pairwise significance (uncertainty reporting)
+    # 5. PACTScore CIs + pairwise significance (uncertainty reporting)
     metrics_path = os.path.join(OUT_DIR, "metrics_v2.csv")
     contrasts_path = os.path.join(OUT_DIR, "contrasts_v2.csv")
     if os.path.exists(metrics_path) and os.path.exists(contrasts_path):
         sig = significance_summary(contrasts_path, metrics_path)
-        plot_rollup_ci(metrics_path, os.path.join(FIG_DIR, "rollup_ci.png"))
+        plot_pact_ci(metrics_path, os.path.join(FIG_DIR, "pact_ci.png"))
         print(f"\n  pairwise: {sig['n_sig']}/{sig['n_pairs']} significant at BH p<0.05; "
               f"top cluster (tied with {FS.short(sig['top'])}): "
               f"{len(sig['cluster'])} models -> {[FS.short(m) for m in sig['cluster']]}")

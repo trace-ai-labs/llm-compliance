@@ -2,14 +2,15 @@
 
 Single source of truth for everything in the paper that must track the numbers:
 
-  1. paper/tables/leaderboard.tex  - the 22-model x 6-axis + rollup leaderboard
-     `tabular`, sorted by the pass^3 rollup, emitted from results/benchmark/
+  1. paper/tables/leaderboard.tex  - the 22-model x 6-axis + PACTScore
+     leaderboard `tabular`, sorted by PACTScore, emitted from results/benchmark/
      metrics_v2.csv. results.tex does `\\input{tables/leaderboard}`.
-  2. paper/figures/*.png           - the subset of results/benchmark/figures the
+  2. paper/tables/pact_macros.tex  - every PACTScore figure the prose quotes.
+  3. paper/figures/*.png           - the subset of results/benchmark/figures the
      paper `\\includegraphics`es, copied so the paper tree is self-contained.
 
 It also prints the field-summary statistics the prose quotes (best/median
-rollup, how many models clear a given bar, the steerability range), so those
+PACTScore, how many models clear a given bar, the steerability range), so those
 sentences can be checked against the live data rather than hand-maintained.
 
 Run after `aggregate` (which writes metrics_v2.csv and the figures):
@@ -68,7 +69,7 @@ PAPER_FIGURES = [
     "unclear_taxonomy.png",  # appendix: 6-way reason-for-abstention split
     "domain_pressure_heatmap.png",  # appendix: t1 compliance, domain x pressure
     "steer_baseline.png",           # appendix: steerability vs baseline (headroom check)
-    "rollup_ci.png",                # appendix: rollup 95% CI caterpillar + top cluster
+    "pact_ci.png",                  # appendix: PACTScore 95% CI caterpillar + top cluster
 ]
 
 
@@ -229,6 +230,14 @@ def _colcell(v: float, col_min: float, col_max: float, fmt: str,
     return f"\\cellcolor[HTML]{{{_rdylgn(t)}}} {body}"
 
 
+def _ci_cell(lo: float, hi: float) -> str:
+    """The PACTScore interval, uncolored so it reads as an annotation on the
+    score beside it rather than as a seventh scored column."""
+    if lo != lo or hi != hi:          # NaN: --fast run left the CI columns empty
+        return "--"
+    return f"\\scriptsize[{lo:.3f}, {hi:.3f}]"
+
+
 def build_table(rows: List[dict]) -> str:
     rows = sorted(rows, key=lambda r: fnum(r, "pact_score"), reverse=True)
     cols = [a for a, _ in AXES] + ["pact_score"]
@@ -239,13 +248,14 @@ def build_table(rows: List[dict]) -> str:
         "% Regenerate after each `aggregate` run; source: results/benchmark/metrics_v2.csv.",
         "% Cell color is scaled WITHIN each column (per-column min..max), so it shows",
         "% relative standing on that axis; color is NOT comparable across columns.",
-        r"\begin{tabular}{l cccccc c}",
+        r"\begin{tabular}{l cccccc c r}",
         r"\toprule",
         (r"\textbf{Model} & \shortstack{\textbf{Default}\\\textbf{Compliance}} & "
          r"\shortstack{\textbf{Pressure}\\\textbf{Resistance}} & "
          r"\shortstack{\textbf{Pushback}\\\textbf{Resistance}} & \textbf{Steerability} & "
          r"\shortstack{\textbf{Reasoning}\\\textbf{Honesty}} & "
-         r"\shortstack{\textbf{Rule-Scope}\\\textbf{Discernment}} & \textbf{PACTScore} \\"),
+         r"\shortstack{\textbf{Rule-Scope}\\\textbf{Discernment}} & \textbf{PACTScore} & "
+         r"\textbf{95\% CI} \\"),
         r"\midrule",
     ]
     for r in rows:
@@ -254,9 +264,64 @@ def build_table(rows: List[dict]) -> str:
         cells = [_colcell(fnum(r, a), lo[a], hi[a], ".3f") for a, _ in AXES]
         cells.append(_colcell(fnum(r, "pact_score"), lo["pact_score"],
                               hi["pact_score"], ".3f", bold=True))
+        # The interval is the whole point of the three decimals: adjacent rows
+        # differ by less than their own half-widths at the top of the table.
+        cells.append(_ci_cell(fnum(r, "pact_score_lo"), fnum(r, "pact_score_hi")))
         lines.append(f"{display(r['model'])} & " + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
     return "\n".join(lines)
+
+
+CONTRASTS_CSV = os.path.join("results", "benchmark", "contrasts_v2.csv")
+ITEMS_JSONL = os.path.join("results", "benchmark", "items_v1.jsonl")
+
+
+def _tex_int(n: int) -> str:
+    """Thousands separator LaTeX will not treat as a math comma."""
+    return f"{n:,}".replace(",", "{,}")
+
+
+def item_universe(path: str = ITEMS_JSONL) -> tuple:
+    """(items in the frozen set, of those how many carry a second turn). Read
+    from items_v1.jsonl rather than from any model's denominator: per-model
+    counts differ once all-unclear items drop out, so quoting one model's count
+    as "the item set" would be wrong."""
+    import json
+    total = multi = 0
+    if not os.path.exists(path):
+        return 0, 0
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            d = json.loads(line)
+            total += 1
+            if d.get("t2_if_compliant"):
+                multi += 1
+    return total, multi
+
+
+def pact_significance(ranked: List[dict], path: str = CONTRASTS_CSV) -> Dict:
+    """How many of the pairwise PACTScore contrasts survive BH correction, and
+    how many models sit in the top indistinguishable cluster (not separated from
+    the leader at BH p<0.05). Returns zeros if contrasts_v2.csv is absent or was
+    left header-only by a `--fast` aggregate."""
+    out = {"n_pairs": 0, "n_sig": 0, "pct_sig": 0.0, "n_cluster": 1}
+    if not os.path.exists(path):
+        return out
+    with open(path, newline="", encoding="utf-8") as f:
+        pairs = [r for r in csv.DictReader(f) if r.get("p_bh") not in ("", None)]
+    if not pairs:
+        return out
+    pbh = {frozenset((r["model_a"], r["model_b"])): float(r["p_bh"]) for r in pairs}
+    out["n_pairs"] = len(pairs)
+    out["n_sig"] = sum(1 for r in pairs if float(r["p_bh"]) < 0.05)
+    out["pct_sig"] = 100.0 * out["n_sig"] / len(pairs)
+    top = ranked[0]["model"]
+    out["n_cluster"] = 1 + sum(
+        1 for r in ranked[1:]
+        if pbh.get(frozenset((top, r["model"])), 0.0) >= 0.05)
+    return out
 
 
 def build_pact_macros(rows: List[dict]) -> str:
@@ -272,7 +337,23 @@ def build_pact_macros(rows: List[dict]) -> str:
     lead, second, last = rk[0], rk[1], rk[-1]
     scores = [fnum(r, "pact_score") for r in rk]
     gaps = [fnum(r, "pact_steer_gap") for r in rk]
-    n_t2_missing = sum(int(float(r.get("pact_n_t2_missing") or 0)) for r in rk)
+    halfwidths = [(fnum(r, "pact_score_hi") - fnum(r, "pact_score_lo")) / 2
+                  for r in rk]
+    sig = pact_significance(rk)
+
+    def _ci(r: dict) -> str:
+        return f"[{fnum(r, 'pact_score_lo'):.3f}, {fnum(r, 'pact_score_hi'):.3f}]"
+
+    def _ints(key: str) -> List[int]:
+        return [int(float(r.get(key) or 0)) for r in rk]
+
+    # Per-model denominators: an item whose every replication was `unclear` leaves
+    # that model's denominator, so these are ranges over the panel, not constants.
+    # The frozen universe is read from the item set itself.
+    n_universe, n_multi = item_universe()
+    decided, decided_t2 = _ints("pact_n_items"), _ints("pact_n_items_t2")
+    # T2 degradations are per model; the max is the number that bounds the claim.
+    n_t2_missing = max(_ints("pact_n_t2_missing"))
     # models the mandate makes WORSE, and the biggest base-vs-directed movers
     backfire = [r for r in rk if fnum(r, "pact_steer_gap") < 0]
     by_base = sorted(rk, key=lambda r: fnum(r, "pact_base"), reverse=True)
@@ -293,11 +374,21 @@ def build_pact_macros(rows: List[dict]) -> str:
         cmd("PactLeader", f"\\texttt{{{display(lead['model'])[9:-1]}}}"
             if False else display(lead["model"])),
         cmd("PactLeaderScore", f"{fnum(lead, 'pact_score'):.3f}"),
+        cmd("PactLeaderCI", _ci(lead)),
         cmd("PactSecond", display(second["model"])),
         cmd("PactSecondScore", f"{fnum(second, 'pact_score'):.3f}"),
+        cmd("PactSecondCI", _ci(second)),
         cmd("PactLast", display(last["model"])),
         cmd("PactLastScore", f"{fnum(last, 'pact_score'):.3f}"),
+        cmd("PactLastCI", _ci(last)),
         cmd("PactSpread", f"{max(scores) - min(scores):.3f}"),
+        cmd("PactTopGap", f"{fnum(lead, 'pact_score') - fnum(second, 'pact_score'):.3f}"),
+        cmd("PactCIHalfMin", f"{min(halfwidths):.3f}"),
+        cmd("PactCIHalfMax", f"{max(halfwidths):.3f}"),
+        cmd("PactNPairs", str(sig["n_pairs"])),
+        cmd("PactNSig", str(sig["n_sig"])),
+        cmd("PactPctSig", f"{sig['pct_sig']:.0f}"),
+        cmd("PactTopCluster", str(sig["n_cluster"])),
         cmd("PactLeaderFail", f"{100 * (1 - fnum(lead, 'pact_score')):.0f}"),
         cmd("PactLeaderBase", f"{fnum(lead, 'pact_base'):.3f}"),
         cmd("PactLeaderDirected", f"{fnum(lead, 'pact_directed'):.3f}"),
@@ -308,13 +399,14 @@ def build_pact_macros(rows: List[dict]) -> str:
         cmd("PactBiggestFallerPlaces", str(abs(faller[1]))),
         cmd("PactBiggestRiser", display(riser[0])),
         cmd("PactBiggestRiserPlaces", str(abs(riser[1]))),
-        cmd("PactNItems", f"{int(float(rk[0].get('pact_n_items') or 0)):,}"
-            .replace(",", "{,}")),
-        cmd("PactNItemsTwo", f"{int(float(rk[0].get('pact_n_items_t2') or 0)):,}"
-            .replace(",", "{,}")),
-        cmd("PactNSingleTurn",
-            f"{int(float(rk[0].get('pact_n_items') or 0)) - int(float(rk[0].get('pact_n_items_t2') or 0)):,}"
-            .replace(",", "{,}")),
+        cmd("PactNItems", _tex_int(n_universe)),
+        cmd("PactNItemsTwo", _tex_int(n_multi)),
+        cmd("PactNSingleTurn", _tex_int(n_universe - n_multi)),
+        # Per-model denominators after all-unclear items drop out.
+        cmd("PactNDecidedMin", _tex_int(min(decided))),
+        cmd("PactNDecidedMax", _tex_int(max(decided))),
+        cmd("PactNDecidedTwoMin", _tex_int(min(decided_t2))),
+        cmd("PactNDecidedTwoMax", _tex_int(max(decided_t2))),
         cmd("PactNTwoMissing", str(n_t2_missing)),
         "",
     ])
@@ -408,10 +500,11 @@ def build_rules_table() -> str:
 
 
 def build_trivial_table(path: str = TRIVIAL_CSV) -> str:
-    """Gameability floor: the four trivial agents scored on every axis. If any
-    out-ranks a real model on an axis, that axis is broken. Reads trivial_v2.csv
-    (written by aggregate); honesty is omitted because the undefined-maps-to-1 rule
-    makes it gameable by a non-violating agent by design, so it is not a fair floor."""
+    """Gameability floor: the four trivial agents scored on every axis and on
+    PACTScore. If any out-ranks a real model, that number is broken. Reads
+    trivial_v2.csv (written by aggregate); honesty is omitted because the
+    undefined-maps-to-1 rule makes it gameable by a non-violating agent by design,
+    so it is not a fair floor. Three decimals, to match the leaderboard."""
     if not os.path.exists(path):
         return ("% trivial_v2.csv missing - run `aggregate` to regenerate it.\n")
     rows = load_rows(path)
@@ -419,10 +512,10 @@ def build_trivial_table(path: str = TRIVIAL_CSV) -> str:
     lines = [
         "% AUTO-GENERATED by src/benchmark/make_paper_assets.py - do not edit by hand.",
         "% Source: results/benchmark/trivial_v2.csv (aggregate's gameability agents).",
-        r"\begin{tabular}{l ccccc}",
+        r"\begin{tabular}{l ccccc c}",
         r"\toprule",
         r"\textbf{Trivial agent} & \textbf{Default} & \textbf{Pressure} & "
-        r"\textbf{Pushback} & \textbf{Steer.} & \textbf{Scope} \\",
+        r"\textbf{Pushback} & \textbf{Steer.} & \textbf{Scope} & \textbf{PACTScore} \\",
         r"\midrule",
     ]
     for r in rows:
@@ -430,7 +523,9 @@ def build_trivial_table(path: str = TRIVIAL_CSV) -> str:
         cells = []
         for a, _ in axes:
             v = fnum(r, a)
-            cells.append("n/a" if v != v else f"{v:.2f}")
+            cells.append("n/a" if v != v else f"{v:.3f}")
+        p = fnum(r, "pact_score")
+        cells.append("n/a" if p != p else f"\\textbf{{{p:.3f}}}")
         lines.append(f"\\texttt{{{name}}} & " + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
     return "\n".join(lines)
@@ -490,20 +585,20 @@ def build_pressure_table(path: str = DIST_PRESSURE_CSV) -> str:
 
 
 def field_summary(rows: List[dict]) -> str:
-    roll = sorted((fnum(r, "rollup_p3") for r in rows), reverse=True)
+    pact = sorted((fnum(r, "pact_score") for r in rows), reverse=True)
     steer = [fnum(r, "steerability") for r in rows]
     hon = [(display(r["model"]), fnum(r, "reasoning_honesty")) for r in rows]
     hon_best = max(hon, key=lambda t: t[1])
-    n95 = sum(1 for v in roll if v >= 0.95)
-    n90 = sum(1 for v in roll if v >= 0.90)
+    n95 = sum(1 for v in pact if v >= 0.95)
+    n90 = sum(1 for v in pact if v >= 0.90)
     out = [
         "-- field summary (quote these in prose) --",
         f"models: {len(rows)}",
-        f"best rollup:   {roll[0]:.3f}  (1 - best = {1 - roll[0]:.3f} unreliable share)",
-        f"median rollup: {median(roll):.3f}",
-        f"worst rollup:  {roll[-1]:.3f}",
-        f"models >= 0.95 rollup: {n95}",
-        f"models >= 0.90 rollup: {n90}",
+        f"best PACTScore:   {pact[0]:.3f}  (1 - best = {1 - pact[0]:.3f} unreliable share)",
+        f"median PACTScore: {median(pact):.3f}",
+        f"worst PACTScore:  {pact[-1]:.3f}",
+        f"models >= 0.95 PACTScore: {n95}",
+        f"models >= 0.90 PACTScore: {n90}",
         f"steerability range: {min(steer):.2f} - {max(steer):.2f}",
         f"highest honesty: {hon_best[0]} at {hon_best[1]:.2f}",
         f"abstention range: {min(a for r in rows for a in [fnum(r, 'abstention')] if a == a) * 100:.1f}% - "

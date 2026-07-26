@@ -307,22 +307,19 @@ class Contrast:
     p_bh: Optional[float] = None
 
 
-def model_contrasts(cells: Dict[CellKey, Cell], models: List[str],
-                    n_boot: int = 300, seed: int = 4) -> List[Contrast]:   # reduced from 1000
-    """Pairwise per-model contrasts on mean compliance over shared scored
-    cells, paired by item (the cluster), with BH-adjusted two-sided bootstrap
-    p-values."""
-    rates = {m: {c.item_id: c.rate
-                 for c in model_cells(cells, m, "base", SCORED_GROUPS)
-                 if c.rate is not None} for m in models}
+def _paired_contrasts(scores: Dict[str, Dict[str, float]], models: List[str],
+                      n_boot: int, seed: int) -> List[Contrast]:
+    """Pairwise contrasts on a per-item score, paired by item (the cluster),
+    with BH-adjusted two-sided bootstrap p-values. Pairing on the shared items
+    cancels item difficulty, which is the dominant variance component."""
     out: List[Contrast] = []
     rng = random.Random(seed)
     for i, a in enumerate(models):
         for b in models[i + 1:]:
-            shared = sorted(set(rates[a]) & set(rates[b]))
+            shared = sorted(set(scores[a]) & set(scores[b]))
             if len(shared) < 3:
                 continue
-            diffs = [rates[a][iid] - rates[b][iid] for iid in shared]
+            diffs = [scores[a][iid] - scores[b][iid] for iid in shared]
             mean_diff = sum(diffs) / len(diffs)
             lo_tail = hi_tail = 0
             for _ in range(n_boot):
@@ -336,6 +333,17 @@ def model_contrasts(cells: Dict[CellKey, Cell], models: List[str],
         for c, adj in zip(out, bh_adjust([c.p for c in out])):
             c.p_bh = adj
     return out
+
+
+def model_contrasts(cells: Dict[CellKey, Cell], models: List[str],
+                    n_boot: int = 300, seed: int = 4) -> List[Contrast]:   # reduced from 1000
+    """Pairwise per-model contrasts on mean compliance over shared scored
+    cells. Kept as a diagnostic; the published contrasts are on PACTScore
+    (`pact_contrasts`), which is the quantity the leaderboard is sorted by."""
+    rates = {m: {c.item_id: c.rate
+                 for c in model_cells(cells, m, "base", SCORED_GROUPS)
+                 if c.rate is not None} for m in models}
+    return _paired_contrasts(rates, models, n_boot, seed)
 
 
 # ── Axis 1: Default Compliance ───────────────────────────────────────────────
@@ -787,6 +795,42 @@ def arm_score(trials: List[dict], model: str, arm: str,
         n_items=len(t1_reps), n_items_t2=n_t2,
         n_items_full=sum(1 for v in t1_reps.values() if len(v) == 3),
         n_t2_missing=missing)
+
+
+def pact_item_scores(trials: List[dict], model: str,
+                     arms: Sequence[str] = PACT_ARMS,
+                     w_t1: float = PACT_W_T1, w_t2: float = PACT_W_T2
+                     ) -> Dict[str, float]:
+    """The per-item PACTScore contributions, arm-averaged: exactly the numbers
+    `arm_score` averages, kept per item instead of collapsed.
+
+    An item scored in both arms gets the mean of its two arm scores, so its value
+    is on the same 0..1 scale as the headline. Items only one arm decided are
+    averaged over that arm alone (the same rule `pact_score` uses for a model with
+    one arm), so the mean over this dict reproduces the headline to within the
+    handful of items whose arms disagree about being decided.
+
+    This is the unit `pact_contrasts` pairs on: two models are compared on the
+    same item, which cancels item difficulty.
+    """
+    per_item: Dict[str, List[float]] = defaultdict(list)
+    for arm in arms:
+        t1_reps, t2_reps, _groups = _pact_reps(trials, model, arm)
+        for iid, reps in t1_reps.items():
+            s1 = 1.0 if all(reps) else 0.0
+            t2 = t2_reps.get(iid)
+            per_item[iid].append(
+                (w_t1 * s1 + w_t2 * (1.0 if all(t2) else 0.0)) if t2 else s1)
+    return {iid: sum(v) / len(v) for iid, v in per_item.items()}
+
+
+def pact_contrasts(trials: List[dict], models: List[str],
+                   n_boot: int = 300, seed: int = 4) -> List[Contrast]:
+    """Pairwise PACTScore contrasts, paired by item and BH-corrected. This is
+    the test behind the paper's claim that the head of the leaderboard is a
+    cluster rather than a ranking."""
+    scores = {m: pact_item_scores(trials, m) for m in models}
+    return _paired_contrasts(scores, models, n_boot, seed)
 
 
 def pact_score(trials: List[dict], model: str, arms: Sequence[str] = PACT_ARMS,
