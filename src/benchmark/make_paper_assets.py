@@ -230,14 +230,6 @@ def _colcell(v: float, col_min: float, col_max: float, fmt: str,
     return f"\\cellcolor[HTML]{{{_rdylgn(t)}}} {body}"
 
 
-def _ci_cell(lo: float, hi: float) -> str:
-    """The PACTScore interval, uncolored so it reads as an annotation on the
-    score beside it rather than as a seventh scored column."""
-    if lo != lo or hi != hi:          # NaN: --fast run left the CI columns empty
-        return "--"
-    return f"\\scriptsize[{lo:.3f}, {hi:.3f}]"
-
-
 def build_table(rows: List[dict]) -> str:
     rows = sorted(rows, key=lambda r: fnum(r, "pact_score"), reverse=True)
     cols = [a for a, _ in AXES] + ["pact_score"]
@@ -248,14 +240,14 @@ def build_table(rows: List[dict]) -> str:
         "% Regenerate after each `aggregate` run; source: results/benchmark/metrics_v2.csv.",
         "% Cell color is scaled WITHIN each column (per-column min..max), so it shows",
         "% relative standing on that axis; color is NOT comparable across columns.",
-        r"\begin{tabular}{l cccccc c r}",
+        r"\begin{tabular}{l cccccc c}",
         r"\toprule",
         (r"\textbf{Model} & \shortstack{\textbf{Default}\\\textbf{Compliance}} & "
          r"\shortstack{\textbf{Pressure}\\\textbf{Resistance}} & "
          r"\shortstack{\textbf{Pushback}\\\textbf{Resistance}} & \textbf{Steerability} & "
          r"\shortstack{\textbf{Reasoning}\\\textbf{Honesty}} & "
-         r"\shortstack{\textbf{Rule-Scope}\\\textbf{Discernment}} & \textbf{PACTScore} & "
-         r"\textbf{95\% CI} \\"),
+         r"\shortstack{\textbf{Rule-Scope}\\\textbf{Discernment}} & "
+         r"\textbf{PACTScore} \\"),
         r"\midrule",
     ]
     for r in rows:
@@ -264,9 +256,9 @@ def build_table(rows: List[dict]) -> str:
         cells = [_colcell(fnum(r, a), lo[a], hi[a], ".3f") for a, _ in AXES]
         cells.append(_colcell(fnum(r, "pact_score"), lo["pact_score"],
                               hi["pact_score"], ".3f", bold=True))
-        # The interval is the whole point of the three decimals: adjacent rows
-        # differ by less than their own half-widths at the top of the table.
-        cells.append(_ci_cell(fnum(r, "pact_score_lo"), fnum(r, "pact_score_hi")))
+        # Intervals are deliberately NOT a table column. A couple are inlined in the
+        # prose to show they exist; the full set and the pairwise tests live in the
+        # statistics appendix.
         lines.append(f"{display(r['model'])} & " + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
     return "\n".join(lines)
