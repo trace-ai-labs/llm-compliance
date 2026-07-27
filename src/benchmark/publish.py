@@ -19,9 +19,14 @@ import json
 import os
 from typing import Dict, List
 
-from src.benchmark.items import DEFAULT_OUT as ITEMS_PATH
 from src.benchmark.items import load_items
-from src.benchmark.registry import BENCH_VERSION, CANARY
+from src.benchmark.registry import BENCH_VERSION, CANARY, MAXIMAL_DIRECTIVE
+
+# Export the corrected corpus. Each scenario cell is emitted TWICE - once per
+# system-prompt mode (base / anti_adversarial) - because the two modes are
+# scored as separate items (distinct prompts, distinct samples).
+ITEMS_PATH = os.path.join("results", "benchmark", "items_v1_corrected.jsonl")
+MODES = ("base", "anti_adversarial")
 
 HF_DIR = os.path.join("results", "benchmark", "hf")
 
@@ -30,7 +35,13 @@ SPLITS = ("dev", "public_test", "private_holdout")
 # One flat row per item. Kept deliberately boring: strings, bools, ints, and
 # JSON-encoded strings for the two genuinely nested fields.
 COLUMNS: Dict[str, str] = {
-    "item_id":            "unique id: {scenario}.{generator}.{group}.{pressure}",
+    "item_id":            "unique id: {scenario}.{generator}.{group}.{pressure}::{mode}",
+    "cell_id":            "the scenario cell this item renders (id without the "
+                          "::mode suffix); the base and anti_adversarial items "
+                          "share one cell_id",
+    "mode":               "system-prompt mode: 'base' | 'anti_adversarial'. The "
+                          "two modes are separate items; anti_adversarial already "
+                          "has the guardrail directive baked into system_prompt",
     "scenario_id":        "one of the 48 scenarios, e.g. 'privacy.A'",
     "domain":             "one of the 12 domains, e.g. 'privacy'",
     "group":              "cell group: neutral | pressure | guard_nonbinding | "
@@ -61,9 +72,9 @@ COLUMNS: Dict[str, str] = {
     "guard_models":       "JSON list of the two trio models that cross-reviewed "
                           "every component of this pack (scope + authenticity + "
                           "label coherence)",
-    "hard_directive":     "the scenario's anti-adversarial guardrail mandate: "
-                          "append it to system_prompt to reproduce the "
-                          "'anti_adversarial' arm",
+    "hard_directive":     "the scenario's guardrail mandate; already appended to "
+                          "system_prompt for the anti_adversarial mode, empty-append "
+                          "for base (kept as a column for provenance)",
     "scenario_title":     "short human title of the scenario's rule",
     "rule":               "the binding rule the agent must hold, in plain terms",
     "local_objective":    "what the rule-violating option wins for the requester "
@@ -76,10 +87,15 @@ COLUMNS: Dict[str, str] = {
 }
 
 
-def flatten(item: dict) -> dict:
+def flatten(item: dict, mode: str = "base") -> dict:
     gold = item["gold"]
+    directive = item.get("hard_directive") or MAXIMAL_DIRECTIVE
+    system_prompt = (item["system_prompt"] + directive
+                     if mode == "anti_adversarial" else item["system_prompt"])
     return {
-        "item_id": item["item_id"],
+        "item_id": f"{item['item_id']}::{mode}",
+        "cell_id": item["item_id"],
+        "mode": mode,
         "scenario_id": item["scenario_id"],
         "domain": item["domain"],
         "group": item["group"],
@@ -89,7 +105,7 @@ def flatten(item: dict) -> dict:
         "pressure_family": item.get("pressure_family", "none"),
         "pressure_mechanism": item.get("pressure_mechanism", ""),
         "metric_axis": item.get("metric_axis", ""),
-        "system_prompt": item["system_prompt"],
+        "system_prompt": system_prompt,
         "turn1": item["turn1"],
         "t2_if_compliant": item["t2_if_compliant"],
         "t2_if_noncompliant": item["t2_if_noncompliant"],
@@ -185,7 +201,9 @@ Every row carries the canary string; filter any training corpus containing it:
 
 def build(items_path: str, out_dir: str, include_private: bool) -> Dict[str, List[dict]]:
     items = load_items(items_path)
-    rows = [flatten(it) for it in items]
+    # Each cell is emitted once per system-prompt mode; the two modes are
+    # separate items (distinct prompts / samples).
+    rows = [flatten(it, mode) for it in items for mode in MODES]
     by_split: Dict[str, List[dict]] = {s: [] for s in SPLITS}
     for r in rows:
         by_split[r["split"]].append(r)

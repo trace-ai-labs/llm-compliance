@@ -32,7 +32,8 @@ AXIS_LABEL = {
     "pressure_resistance": "Pressure\nresistance",
     "pushback_resistance": "Pushback\nresistance",
     "steerability": "Steerability",
-    "reasoning_honesty": "Reasoning\nhonesty",
+    "transparency": "Transparency",
+    "reasoning_honesty": "Reasoning\nhonesty",   # legacy diagnostic (motive taxonomy)
     "rule_scope_discernment": "Rule-scope\ndiscernment",
 }
 

@@ -45,14 +45,16 @@ scoring): `src/benchmark/` in the source repository.
 
 | split | items |
 |---|---|
-| dev | 453 |
-| public_test | 865 |
+| dev | 874 |
+| public_test | 1674 |
 
 ## Columns
 
 | column | meaning |
 |---|---|
-| `item_id` | unique id: {scenario}.{generator}.{group}.{pressure} |
+| `item_id` | unique id: {scenario}.{generator}.{group}.{pressure}::{mode} |
+| `cell_id` | the scenario cell this item renders (id without the ::mode suffix); the base and anti_adversarial items share one cell_id |
+| `mode` | system-prompt mode: 'base' | 'anti_adversarial'. The two modes are separate items; anti_adversarial already has the guardrail directive baked into system_prompt |
 | `scenario_id` | one of the 48 scenarios, e.g. 'privacy.A' |
 | `domain` | one of the 12 domains, e.g. 'privacy' |
 | `group` | cell group: neutral | pressure | guard_nonbinding | attack_binding | attack_nonbinding |
@@ -73,7 +75,7 @@ scoring): `src/benchmark/` in the source repository.
 | `split` | 'dev' | 'public_test' | 'private_holdout' |
 | `generator_model` | model that authored this item's scenario pack end-to-end (each generator writes its own complete version of every scenario) |
 | `guard_models` | JSON list of the two trio models that cross-reviewed every component of this pack (scope + authenticity + label coherence) |
-| `hard_directive` | the scenario's anti-adversarial guardrail mandate: append it to system_prompt to reproduce the 'anti_adversarial' arm |
+| `hard_directive` | the scenario's guardrail mandate; already appended to system_prompt for the anti_adversarial mode, empty-append for base (kept as a column for provenance) |
 | `scenario_title` | short human title of the scenario's rule |
 | `rule` | the binding rule the agent must hold, in plain terms |
 | `local_objective` | what the rule-violating option wins for the requester (and thus what compliance costs) |

@@ -87,8 +87,8 @@ if ($Eval) {
     python -m src.benchmark.runner --models @($EvalModels) --reps $Reps --no-t2 `
         --workers $Workers --rpm $Rpm --extract-rpm 250 --max-tokens $MaxTokens
     Remove-Item Env:\BENCH_API_KEY_ENV -ErrorAction SilentlyContinue   # extractor -> BASETEN for rejudge
-    python -m src.benchmark.rejudge --force-only --workers 16 --extract-rpm 1000 --model-rpm 120
-    python -m src.benchmark.rejudge --rerun-t2 --workers 24 --extract-rpm 1000 `
+    python -m src.benchmark.rejudge --force-only --workers 16 --extract-rpm 10000 --model-rpm 120
+    python -m src.benchmark.rejudge --rerun-t2 --workers 24 --extract-rpm 10000 `
         --model-rpm 0 --pushback-max-tokens $MaxTokens
     Write-Host "eval complete. verify parity per docs/RUN_A_NEW_MODEL.md section 5."
 }
@@ -96,6 +96,13 @@ if ($Eval) {
 if ($Judges) {
     # Stage 4 - taxonomies (trio leave-one-out; judges key-routed automatically).
     python -m src.benchmark.judges classify-honesty --frac $HonestyFrac --workers 20
+    # axis-5 v2: reader-effect transparency (TRANSPARENCY metric = TRANSPARENT share).
+    # Runs on ALL binding violations by default; additive to classify-honesty.
+    python -m src.benchmark.judges classify-transparency --frac 1.0 --workers 20
+    # Abstention taxonomy: still-unclear turns (T1+T2, post-push), transparency-style
+    # context. Population/context changed from the old first-attempt version, so clear
+    # the stale file first (avoids resuming old-scheme rows).
+    Remove-Item results\benchmark\unclear_reasons.jsonl -Force -ErrorAction SilentlyContinue
     python -m src.benchmark.judges classify-unclear --frac 1.0 --workers 20
     # Optional human-kappa / awareness / judge-swap gate:
     #   python -m src.benchmark.judges sample-honesty -n 60
@@ -106,6 +113,8 @@ if ($Aggregate) {
     # Stage 5 - six axes, cross-fitted CVaR rollup + CIs, contrasts, gates, figures.
     python -m src.benchmark.aggregate --figures
     python -m src.benchmark.judges plot-taxonomy
+    python -m src.benchmark.judges plot-transparency   # transparency pie + by-arm bar (paper figs)
+    python -m src.benchmark.judges plot-unclear        # unclear pie + by-arm bar (paper figs)
     python -m src.benchmark.distributions   # domain x axis, pressure, domain x pressure heatmap
     Write-Host "outputs: metrics_v2.csv|.md, cells_v2.csv, contrasts_v2.csv, dist_*.csv, figures/*.png"
 }

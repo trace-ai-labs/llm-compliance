@@ -69,9 +69,12 @@ def load_all_trials(trials_dir: str) -> List[dict]:
                 if not line:
                     continue
                 try:
-                    rows.append(json.loads(line))
+                    r = json.loads(line)
                 except json.JSONDecodeError:
                     continue
+                if r.get("excluded"):   # dropped by corpus corrections
+                    continue
+                rows.append(r)
     return rows
 
 

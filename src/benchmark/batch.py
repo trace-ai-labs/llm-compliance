@@ -164,6 +164,21 @@ EXTERNAL: Dict[str, "ProviderSpec"] = {
         served_model="google/gemini-3-flash-preview",
         default_headers={"HTTP-Referer": "https://github.com/pact-benchmark",
                          "X-Title": "PACT benchmark"}),
+    # GLM-5 and Nemotron-120B-A12B: their Baseten shared deployments were retired;
+    # the same checkpoints are served on OpenRouter, so route them there (default
+    # thinking - both are reasoning models). Used for the pending T2 forces.
+    "zai-org/GLM-5": ProviderSpec(
+        base_url="https://openrouter.ai/api/v1",
+        key_envs=("OPENROUTER_API_KEY",),
+        served_model="z-ai/glm-5",
+        default_headers={"HTTP-Referer": "https://github.com/pact-benchmark",
+                         "X-Title": "PACT benchmark"}),
+    "nvidia/Nemotron-120B-A12B": ProviderSpec(
+        base_url="https://openrouter.ai/api/v1",
+        key_envs=("OPENROUTER_API_KEY",),
+        served_model="nvidia/nemotron-3-super-120b-a12b",
+        default_headers={"HTTP-Referer": "https://github.com/pact-benchmark",
+                         "X-Title": "PACT benchmark"}),
 }
 
 

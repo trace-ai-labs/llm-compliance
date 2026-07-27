@@ -52,7 +52,7 @@ AXES = [
     ("pressure_resistance", "Pressure"),
     ("pushback_resistance", "Pushback"),
     ("steerability", "Steer."),
-    ("reasoning_honesty", "Honesty"),
+    ("transparency", "Transparency"),
     ("rule_scope_discernment", "Scope"),
 ]
 
@@ -66,7 +66,12 @@ PAPER_FIGURES = [
     "radar.png",             # appendix: all-22 small-multiples profile
     "per_domain.png",        # appendix: per-domain base compliance
     "honesty_taxonomy.png",  # appendix: silent / rationalized / defiant split
-    "unclear_taxonomy.png",  # appendix: 6-way reason-for-abstention split
+    "unclear_taxonomy.png",  # appendix: 4-way reason-for-abstention split
+    "transparency_pie.png",     # transparency: TRANSPARENT/CONCEALED/MISREPRESENTED split
+    "transparency_by_arm.png",  # transparency: the 3-way split, base vs anti-adversarial
+    "unclear_pie.png",          # unclear: 4-way abstention-reason split (still-unclear turns)
+    "unclear_by_arm.png",       # unclear: the 4-way split, base vs anti-adversarial
+    "agreement_reasoning_unclear.png",  # appendix: unclear judge pair kappas (4-way)
     "domain_pressure_heatmap.png",  # appendix: t1 compliance, domain x pressure
     "steer_baseline.png",           # appendix: steerability vs baseline (headroom check)
     "pact_ci.png",                  # appendix: PACTScore 95% CI caterpillar + top cluster
@@ -245,7 +250,7 @@ def build_table(rows: List[dict]) -> str:
         (r"\textbf{Model} & \shortstack{\textbf{Default}\\\textbf{Compliance}} & "
          r"\shortstack{\textbf{Pressure}\\\textbf{Resistance}} & "
          r"\shortstack{\textbf{Pushback}\\\textbf{Resistance}} & \textbf{Steerability} & "
-         r"\shortstack{\textbf{Reasoning}\\\textbf{Honesty}} & "
+         r"\textbf{Transparency} & "
          r"\shortstack{\textbf{Rule-Scope}\\\textbf{Discernment}} & "
          r"\textbf{PACTScore} \\"),
         r"\midrule",
@@ -265,7 +270,7 @@ def build_table(rows: List[dict]) -> str:
 
 
 CONTRASTS_CSV = os.path.join("results", "benchmark", "contrasts_v2.csv")
-ITEMS_JSONL = os.path.join("results", "benchmark", "items_v1.jsonl")
+ITEMS_JSONL = os.path.join("results", "benchmark", "items_v1_corrected.jsonl")
 
 
 def _tex_int(n: int) -> str:
@@ -274,12 +279,13 @@ def _tex_int(n: int) -> str:
 
 
 def item_universe(path: str = ITEMS_JSONL) -> tuple:
-    """(items in the frozen set, of those how many carry a second turn). Read
-    from items_v1.jsonl rather than from any model's denominator: per-model
-    counts differ once all-unclear items drop out, so quoting one model's count
-    as "the item set" would be wrong."""
+    """(items in the frozen set, of those how many carry a second turn). Each
+    scenario cell is scored in two system-prompt modes (base / anti_adversarial),
+    and the two modes are counted as separate items, so both counts are the cell
+    count doubled. Read from the item file rather than any model's denominator:
+    per-model counts differ once all-unclear items drop out."""
     import json
-    total = multi = 0
+    cells = multi_cells = 0
     if not os.path.exists(path):
         return 0, 0
     with open(path, encoding="utf-8") as f:
@@ -287,10 +293,10 @@ def item_universe(path: str = ITEMS_JSONL) -> tuple:
             if not line.strip():
                 continue
             d = json.loads(line)
-            total += 1
+            cells += 1
             if d.get("t2_if_compliant"):
-                multi += 1
-    return total, multi
+                multi_cells += 1
+    return cells * 2, multi_cells * 2
 
 
 def pact_significance(ranked: List[dict], path: str = CONTRASTS_CSV) -> Dict:
@@ -343,9 +349,12 @@ def build_pact_macros(rows: List[dict]) -> str:
     # that model's denominator, so these are ranges over the panel, not constants.
     # The frozen universe is read from the item set itself.
     n_universe, n_multi = item_universe()
-    decided, decided_t2 = _ints("pact_n_items"), _ints("pact_n_items_t2")
+    # Per-model denominators are per cell; double for the two-mode item basis
+    # (each cell is scored as a base item and an anti_adversarial item).
+    decided = [2 * x for x in _ints("pact_n_items")]
+    decided_t2 = [2 * x for x in _ints("pact_n_items_t2")]
     # T2 degradations are per model; the max is the number that bounds the claim.
-    n_t2_missing = max(_ints("pact_n_t2_missing"))
+    n_t2_missing = 2 * max(_ints("pact_n_t2_missing"))
     # models the mandate makes WORSE, and the biggest base-vs-directed movers
     backfire = [r for r in rk if fnum(r, "pact_steer_gap") < 0]
     by_base = sorted(rk, key=lambda r: fnum(r, "pact_base"), reverse=True)
@@ -500,7 +509,7 @@ def build_trivial_table(path: str = TRIVIAL_CSV) -> str:
     if not os.path.exists(path):
         return ("% trivial_v2.csv missing - run `aggregate` to regenerate it.\n")
     rows = load_rows(path)
-    axes = [(a, lbl) for a, lbl in AXES if a != "reasoning_honesty"]
+    axes = [(a, lbl) for a, lbl in AXES if a != "transparency"]
     lines = [
         "% AUTO-GENERATED by src/benchmark/make_paper_assets.py - do not edit by hand.",
         "% Source: results/benchmark/trivial_v2.csv (aggregate's gameability agents).",
@@ -545,7 +554,7 @@ def build_domain_axis_table(path: str = DIST_DOMAIN_CSV) -> str:
         r"\midrule",
     ]
     for r in rows:
-        cells = [_colcell(fnum(r, c), lo[c], hi[c], ".2f") for c in cols]
+        cells = [_colcell(fnum(r, c), lo[c], hi[c], ".3f") for c in cols]
         lines.append(f"{_tex_escape(short_domain(r['domain']))} & "
                      + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
@@ -570,8 +579,8 @@ def build_pressure_table(path: str = DIST_PRESSURE_CSV) -> str:
     ]
     for r in rows:
         name = _tex_escape(r["pressure"].replace("_", " "))
-        lines.append(f"{name} & {fnum(r, 't1_comply'):.2f} & "
-                     f"{fnum(r, 't2_hold'):.2f} & {fnum(r, 'steerability'):.2f} \\\\")
+        lines.append(f"{name} & {fnum(r, 't1_comply'):.3f} & "
+                     f"{fnum(r, 't2_hold'):.3f} & {fnum(r, 'steerability'):.3f} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
     return "\n".join(lines)
 
@@ -579,7 +588,7 @@ def build_pressure_table(path: str = DIST_PRESSURE_CSV) -> str:
 def field_summary(rows: List[dict]) -> str:
     pact = sorted((fnum(r, "pact_score") for r in rows), reverse=True)
     steer = [fnum(r, "steerability") for r in rows]
-    hon = [(display(r["model"]), fnum(r, "reasoning_honesty")) for r in rows]
+    hon = [(display(r["model"]), fnum(r, "transparency")) for r in rows]
     hon_best = max(hon, key=lambda t: t[1])
     n95 = sum(1 for v in pact if v >= 0.95)
     n90 = sum(1 for v in pact if v >= 0.90)
@@ -592,7 +601,7 @@ def field_summary(rows: List[dict]) -> str:
         f"models >= 0.95 PACTScore: {n95}",
         f"models >= 0.90 PACTScore: {n90}",
         f"steerability range: {min(steer):.2f} - {max(steer):.2f}",
-        f"highest honesty: {hon_best[0]} at {hon_best[1]:.2f}",
+        f"highest transparency: {hon_best[0]} at {hon_best[1]:.2f}",
         f"abstention range: {min(a for r in rows for a in [fnum(r, 'abstention')] if a == a) * 100:.1f}% - "
         f"{max(a for r in rows for a in [fnum(r, 'abstention')] if a == a) * 100:.1f}%  "
         f"(median {median(sorted(a for r in rows for a in [fnum(r, 'abstention')] if a == a)) * 100:.1f}%)",
