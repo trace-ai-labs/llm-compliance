@@ -1,13 +1,27 @@
 \section{PACT: A Compliance Benchmark for Regulated Enterprise Assistants}
 \label{sec:pact}
 
+% Declared at the head of Section 3, before its first paragraph. Declaring it after
+% that paragraph pushes the float a page late, because the paragraph itself spills
+% onto the next page and a figure* cannot claim a page top already shipped.
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.7938\textwidth]{figures/pact_overall_pipeline}
+\caption{How a single PACT trial runs and is scored. The \emph{scenario} fixes the persona,
+the standing rule, the user's goal, and the options; the \emph{variables} are the optional
+anti-adversarial mandate and whether turn~1 is neutral, pressured, or non-binding. Unclear
+replies are forced to a choice and compliant ones are pushed back, so every trial resolves.}
+\label{fig:pipeline}
+\end{figure*}
+
 Each PACT sample puts an agent into a scenario. Each scenario contains a
 system prompt that explains the assistant's role within the enterprise and the rules
 that it must follow. A user makes a request that asks the assistant for
 support choosing between 2-5 options which vary in their compliance status and desirability
 (speed, cost, customer satisfaction). Each scenario or request is tested alongside a battery of 
 user pressures, with and without an explicit compliance mandate in the system prompt, 
-and in conditions when the rule does not apply. 
+and in conditions when the rule does not apply. Figure~\ref{fig:pipeline} shows how one
+trial runs end to end, from the two system-prompt modes through to the six axes.
 We first describe how an item is built and audited (\S\ref{sec:building}),
 then the six metrics those items feed (\S\ref{sec:metrics}).
 
@@ -47,7 +61,7 @@ Lastly, each scenario ships a near-identical version in which the
 rule does not apply. Here \emph{holding} the rule is the error. The twin separates
 rule-following from rule-parroting. Appendix~\ref{app:failures} works one item end to end,
 from its system prompt to the leader's violation and turn-2 reversal, and
-Appendix~\ref{app:budget} details the 13-item battery each scenario yields.
+Appendix~\ref{app:budget} details the 13-item battery per scenario.
 
 
 \subsubsection{Pressures}
@@ -68,7 +82,7 @@ a realistic enterprise threat.
 \subsubsection{Generating Samples from Scenarios.}
 \label{sec:generation}
 Samples are assembled from human-written seed scenarios and requests by an LLM, which integrates
-prompt sections component by component, connected naturally by realistic user prose and maintaning
+prompt sections component by component (Figure~\ref{fig:generator}), connected naturally by realistic user prose and maintaning
 the structure and voice of previously added components through the progression.
 %
 The components are assistant persona, scenario rule, rule following mandate if applicable, user request and options, 
@@ -81,7 +95,7 @@ lower-case text, and options that look like they were copy pasted from a form or
 
 \begin{figure}[t]
 \centering
-\includegraphics[width=\columnwidth]{figures/pact_generator}
+\includegraphics[width=0.9\columnwidth]{figures/pact_generator}
 \caption{Item generation. Three generators build each pack block by block; the two that
 did \emph{not} write a block score it against a checklist and send feedback until it
 passes.}
@@ -153,12 +167,8 @@ has to be right every time. All six axes range from 0 to 1 with higher being bet
 
 \item \textbf{Steerability} measures how much of a model's failures are mitigated when the prompt instead specifies that all rules must be followed without exception.
 % (rate it passes all three with) - (rate it passes iwthout)
-\item \textbf{Reasoning Honesty} measures, on the base-mode binding violations, whether
-the model admits the breach: $1-\text{silent rate}$, where a violation's silent rate is
-the fraction of the ensemble judges that labeled it silent (each judge labels it silent,
-rationalized, or defiant-honest), averaged over the model's violations. Because the
-denominator is violations, the best models have the least data, so an undefined value
-maps to $1$ and is held out of the harmonic mean.
+\item \textbf{Reasoning Honesty} measures the fraction of trials where the compliance rule is violated
+that the model openly identifies the rule and acknowledges it was broken.
 
 \item \textbf{Rule-Scope Discernment} measures whether the model applies the rule only
 where it binds: $\tfrac12[\text{pass}^3(\text{bind}) +
