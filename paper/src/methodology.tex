@@ -28,7 +28,7 @@ then the six metrics those items feed (\S\ref{sec:metrics}).
 \subsection{Building PACT}
 \label{sec:building}
 
-\subsubsection{Domains and scenarios.}
+\paragraph{Domains and scenarios.}
 \label{sec:domains}
 We first curate 48 scenarios within twelve regulated domains (Appendix~\ref{app:domains}), 
 spanning privacy (GDPR), finance, customer service, government services, human resources, anti-money-laundering, healthcare
@@ -46,7 +46,7 @@ Domain experts in deploying AI assistants for customer use-cases wrote seed desc
 including a detailed description of the agent persona, rules, and user ask.
 
 
-\subsubsection{Template-based Prompt Construction}
+\paragraph{Template-based prompt construction.}
 \label{sec:template}
 
 Every scenario is expanded into dataset samples via a template that ensures that compliance
@@ -58,13 +58,14 @@ Second, out of the two to five mutually-exclusive options, at least one must bre
 Option order is randomized. Third, if a model does not make a decision in its first turn, a follow-up user message probes it
 to state an option. Similarly, a follow-up pushes back if the model complied and challenges it if the model violated.
 Lastly, each scenario ships a near-identical version in which the
-rule does not apply. Here \emph{holding} the rule is the error. The twin separates
-rule-following from rule-parroting. Appendix~\ref{app:failures} works one item end to end,
+rule does not apply. Here \emph{holding} the rule is the error. Pairing a request where
+the rule applies against one where it does not separates rule-following from
+rule-parroting. Appendix~\ref{app:failures} works one item end to end,
 from its system prompt to the leader's violation and turn-2 reversal, and
 Appendix~\ref{app:budget} details the 13-item battery per scenario.
 
 
-\subsubsection{Pressures}
+\paragraph{Pressures.}
 \label{sec:pressures}
 We introduce a battery of nine pressures that a benign coworker may apply
 to elicit a desired behavior. Each draws on a mechanism from the literature on why
@@ -79,7 +80,7 @@ a sympathetic person harmed by compliance (empathy), and an offer to take the bl
 None of these are an attempt to jailbreak, but a conflict of convenience with compliance,
 a realistic enterprise threat.
 
-\subsubsection{Generating Samples from Scenarios.}
+\paragraph{Generating samples from scenarios.}
 \label{sec:generation}
 Samples are assembled from human-written seed scenarios and requests by an LLM, which integrates
 prompt sections component by component (Figure~\ref{fig:generator}), connected naturally by realistic user prose and maintaning
@@ -115,7 +116,7 @@ flaws (Cohen's $\kappa=0.353$, Appendix~\ref{app:agreement}). The final \textbf{
 system-prompt modes (base and anti-adversarial) counted as separate items, form the
 \textbf{3{,}364}-item benchmark.
 
-\subsubsection{Evaluation protocol.}
+\paragraph{Evaluation protocol.}
 \label{sec:protocol}
 Each model runs every PACT sample three times, so the panel comes to \textbf{10{,}092}
 trials per model and roughly \textbf{222{,}000} in total, before the top-ups the power
@@ -171,34 +172,23 @@ has to be right every time. All six axes range from 0 to 1 with higher being bet
 that the model openly identifies the rule and acknowledges it was broken.
 
 \item \textbf{Rule-Scope Discernment} measures whether the model applies the rule only
-where it binds: $\tfrac12[\text{pass}^3(\text{bind}) +
-\text{pass}^3(\text{stand-down})]$, over the binding items and the near-identical twins
-where holding the rule is the error. Equal weighting keeps the stand-down direction,
-which carries the discriminating signal, from being swamped by the binding direction
-that overlaps Default Compliance.
+where it is applicable, calculated by averaging the fraction of trials where the rule
+does apply in which the model consistently correctly applies the rule and the fraction of 
+trials where the model correctly stands down to the user demand when the rule does not
+apply.
 \end{enumerate}
 
 \paragraph{PACTScore.}
 \label{sec:pactscore}
 For a single headline we report the mean over the \PactNItems\ items of
-$s_i = 0.75\,T^1_i + 0.25\,T^2_i$ (or $T^1_i$ alone for the \PactNSingleTurn\ items
-with no second turn), where each scenario cell contributes two items, one per
-system-prompt mode. Here $T^1_i$ and
-$T^2_i$ are $\text{pass}^3$ indicators: the model makes the correct call on every
-replication, and also holds it after pushback. ``Correct'' is the same call in both
-directions, so on a non-binding twin it means standing down; no branch on whether the
-rule binds appears anywhere in the score. A replication judged \texttt{unclear} is
-dropped rather than counted as a violation, which keeps ``would not answer'' distinct
-from ``broke the rule'' and leaves abstention as a separate reported diagnostic
-(Appendix~\ref{app:abstention}).
-
-Four choices make this a measure of compliance alone. Items are weighted equally, so the
-composition is not a claim about which pressure or domain matters most. Turn~1 carries
-$0.75$ because violating on first contact is worse than conceding to a person who pushes
-back. Counting each system-prompt mode as a separate item credits both unprompted
-compliance and compliance under an explicit mandate, so a model that a mandate cannot lift
-scores lower for it. And both directions of the scope judgment are charged identically:
-enforcing a rule that does not apply scores zero exactly as breaking one that does, since
-in both the model has misjudged the rule's scope, and an assistant that cannot tell the two
-apart is not following rules, only reciting them. Reasoning honesty is the one axis
-excluded, because a model that announces its violations has still violated.
+$s_i = 0.75\,T^1_i + 0.25\,T^2_i$, or $T^1_i$ alone for the \PactNSingleTurn\ items with
+no second turn, where $T^1_i$ and $T^2_i$ are $\text{pass}^3$ indicators and each scenario
+cell contributes one item per system-prompt mode. Turn~1 carries the larger weight because
+violating on first contact is worse than conceding to someone who pushes back, and scoring
+both modes credits compliance a mandate has to produce as well as compliance that comes
+unprompted. ``Correct'' means the same call in both directions: enforcing a rule that does
+not apply scores zero exactly as breaking one that does, since either way the model has
+misjudged the rule's scope. Replications judged \texttt{unclear} are dropped rather than
+counted as violations, keeping abstention a separate diagnostic
+(Appendix~\ref{app:abstention}). Reasoning honesty is excluded, because a model that
+announces its violation has still violated.
