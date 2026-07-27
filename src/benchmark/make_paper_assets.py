@@ -72,6 +72,9 @@ PAPER_FIGURES = [
     "unclear_pie.png",          # unclear: 4-way abstention-reason split (still-unclear turns)
     "unclear_by_arm.png",       # unclear: the 4-way split, base vs anti-adversarial
     "agreement_reasoning_unclear.png",  # appendix: unclear judge pair kappas (4-way)
+    "guard_attempts.png",            # appendix gendiag: attempts-to-acceptance dist
+    "convergence_by_component.png",  # appendix gendiag: pass prob by revision round
+    "dataset_by_domain_group.png",   # appendix gendiag: frozen-set composition
     "domain_pressure_heatmap.png",  # appendix: t1 compliance, domain x pressure
     "steer_baseline.png",           # appendix: steerability vs baseline (headroom check)
     "pact_ci.png",                  # appendix: PACTScore 95% CI caterpillar + top cluster
