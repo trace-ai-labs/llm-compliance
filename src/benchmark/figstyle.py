@@ -84,7 +84,7 @@ DISPLAY_NAME = {
     "thinkingmachines/inkling": "Inkling",
     "zai-org/GLM-5": "GLM-5",
     "gemma-4-26b": "Gemma-4-26B",
-    "openai/gpt-oss-120b": "gpt-oss-120b",
+    "openai/gpt-oss-120b": "GPT-OSS-120B",
     "qwen3.5-35b-a3b": "Qwen3.5-35B",
     "MiniMaxAI/MiniMax-M2.5": "MiniMax-M2.5",
     "llama-3.3-70b-instruct": "Llama-3.3-70B",
