@@ -400,7 +400,7 @@ def build_pact_macros(rows: List[dict]) -> str:
         cmd("PactCIHalfMax", f"{max(halfwidths):.3f}"),
         cmd("PactNPairs", str(sig["n_pairs"])),
         cmd("PactNSig", str(sig["n_sig"])),
-        cmd("PactPctSig", f"{sig['pct_sig']:.0f}"),
+        cmd("PactPctSig", f"{sig['pct_sig']:.1f}"),
         cmd("PactTopCluster", str(sig["n_cluster"])),
         cmd("PactLeaderFail", f"{100 * (1 - fnum(lead, 'pact_score')):.0f}"),
         cmd("PactLeaderBase", f"{fnum(lead, 'pact_base'):.3f}"),
