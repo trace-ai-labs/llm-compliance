@@ -65,11 +65,7 @@ PAPER_FIGURES = [
     "radar.png",             # appendix: all-22 small-multiples profile
     "per_domain.png",        # appendix: per-domain base compliance
     "unclear_taxonomy.png",  # appendix: 4-way reason-for-abstention split
-    "transparency_by_arm.png",  # appendix: the 3-way split, base vs anti-adversarial
-    "unclear_by_arm.png",       # appendix: the 4-way split, base vs anti-adversarial
     "eval_awareness.png",       # appendix: realism-ladder deltas (realism_probe figure)
-    "agreement_reasoning_unclear.png",  # appendix: unclear judge pair kappas (4-way)
-    "guard_attempts.png",            # appendix gendiag: attempts-to-acceptance dist
     "convergence_by_component.png",  # appendix gendiag: pass prob by revision round
     "dataset_by_domain_group.png",   # appendix gendiag: frozen-set composition
     "domain_pressure_heatmap.png",  # appendix: t1 compliance, domain x pressure

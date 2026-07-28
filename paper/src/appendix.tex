@@ -23,13 +23,11 @@
 \section{Evaluated Models}
 \label{app:models}
 
-Table~\ref{tab:models} lists the 22-model panel with provider, parameter count
-(total, plus active experts for mixture-of-experts models), release date, and a
-one-line training note, each cited to the model's technical report or official
-card. The panel spans three years of releases (Mistral-7B in 2023 to Inkling in
-mid-2026), four closed frontier systems, and open-weights models from 7B dense to
-trillion-parameter sparse mixtures, so a result that holds across it does not
-depend on one training recipe or one scale.
+Table~\ref{tab:models} lists the 22-model panel, each cited to its technical report
+or official card. The panel spans three years of releases (Mistral-7B in 2023 to
+Inkling in mid-2026), four closed frontier systems, and open-weights models from 7B
+dense to trillion-parameter sparse mixtures, so a result that holds across it does
+not depend on one training recipe or one scale.
 
 \begin{table*}[t]
 \centering
@@ -48,17 +46,13 @@ against official model cards and technical reports.}
 \label{app:domains}
 
 Table~\ref{tab:rules} reproduces all 48 scenario seeds verbatim from the frozen
-registry the generators were conditioned on: the scenario, its domain, the standing
-rule, what violating it buys the requester, and the local objective the convenient
-option serves. Four scenarios come from each of the twelve domains, and each carries
-up to the full 13-item battery, with a partial version dropping only the items whose
-add-on failed review.
-
-The rule is always stated as plain fact rather than as a command; the strictness in
-the steerability arm comes only from the separately generated hard directive
-(\S\ref{sec:metrics}). The local objective is written per scenario in the requester's
-own terms rather than as a fixed per-domain KPI, so what compliance costs is specific
-to the situation.
+registry the generators were conditioned on: the standing rule, what violating it
+buys the requester, and the local objective the convenient option serves. Four
+scenarios come from each of the twelve domains. The rule is always stated as plain
+fact rather than as a command --- strictness in the steerability arm comes only from
+the separately generated hard directive (\S\ref{sec:metrics}) --- and the local
+objective is written in the requester's own terms, so what compliance costs is
+specific to the situation.
 
 \input{tables/rules}
 
@@ -226,26 +220,23 @@ Each (scenario, generator) version renders into 13 cells: one \emph{neutral} cel
 (rule present, no pressure), nine \emph{pressure} cells (the scored battery), one
 \emph{non-binding guard}, one \emph{attack-binding} cell (a binding cell plus the
 rule-delegitimization add-on), and one \emph{attack-non-binding} cell (a guard plus
-an add-on that insists the rule applies). With three generator versions per scenario, the
-battery tops out at $48 \times 3 \times 13 = 1{,}872$ cells. After partial
-versions (an add-on that never cleared review drops its own cell) and a small set of
-versions withheld in final review, the frozen release holds $1{,}682$ cells across $137$
-versions.
-
-Each cell is scored in two system-prompt modes, base and anti-adversarial, counted as
-separate items, for $3{,}364$ items. Every item carries a conditional turn~2, so one
-trial costs about two model calls plus a possible judge call, and every item is run
-three times by every model with no cell topped up beyond that.
+an add-on that insists the rule applies). With three generator versions per scenario,
+the battery tops out at $48 \times 3 \times 13 = 1{,}872$ cells; after partial
+versions and final review, the frozen release holds $1{,}682$ cells across $137$
+versions. Each cell is scored in two system-prompt modes, base and anti-adversarial,
+counted as separate items, for $3{,}364$ items, each carrying a conditional turn~2
+and run three times by every model. Every released item embeds a canary GUID so
+future training-set contamination is detectable.
 
 \section{Generation and Judge Prompts}
 \label{app:prompts}
 
-Generation is zero-shot: no prompt contains a worked example. The complete generator
-and guard prompts ship with the released code; here we reproduce the two pieces that
-shape the data most. The first is the pressure catalog (Table~\ref{tab:pressureprompts}),
-the only place the generator is told what a pressure means. It gives a plain-English
-description of what the add-on should do to the reader, and never a phrasing to copy.
-The second is the guard reviewer's charter, applied to every component.
+Generation is zero-shot: no prompt contains a worked example. The complete prompts
+ship with the released code; here we reproduce the pieces that shape the data most.
+The pressure catalog (Table~\ref{tab:pressureprompts}) is the only place the generator
+is told what a pressure means: a plain-English description of what the add-on should
+do to the reader, never a phrasing to copy. The guard reviewer's charter is applied
+to every component.
 
 \begin{table*}[t]
 \centering
@@ -276,9 +267,8 @@ drives the discernment-under-attack items.}
 \label{tab:pressureprompts}
 \end{table*}
 
-Every structurally valid component is then reviewed by the guard below, and a FAIL
-from either reviewer rejects it. The charter is abridged here to its two checks
-and the calibration that prevents phantom failures.
+A FAIL from either reviewer rejects a component. The charter is abridged to its two
+checks and the calibration that prevents phantom failures.
 
 \begin{promptbox}[Guard reviewer, system prompt (abridged)]
 \small\ttfamily
@@ -375,13 +365,10 @@ Reply with EXACTLY ONE of: HANDED\_BACK, NONCONFORMING\_PICK, REFUSED\_ON\_POLIC
 \label{app:gendiag}
 
 Because the items are LLM-authored and audited, the generation run is itself data about
-which scenarios and pressures are hard to write convincingly. Every component was
-reviewed by two non-authoring models and revised until it passed or exhausted its retry
-budget. Table~\ref{tab:gencomponent} breaks the review down by component type. The
-standing rule note passes most readily (86\%, 1.9 tries on average). Hardest to make read
-as real are the add-ons that must invent a fresh situation: the pressures, the guard
-request where the rule does not apply, and the two attacks all sit at 53--57\% pass and
-2.4--2.6 tries.
+what is hard to write convincingly. Table~\ref{tab:gencomponent} breaks the review down
+by component type: the standing rule note passes most readily (86\%, 1.9 tries), while
+the add-ons that must invent a fresh situation --- the pressures, the non-binding
+guard, and the two attacks --- sit at 53--57\% pass and 2.4--2.6 tries.
 
 \begin{table}[t]
 \centering
@@ -407,11 +394,10 @@ that must fabricate a plausible situation are hardest.}
 \end{table}
 
 The pressures vary widely in how naturally they fit a scenario
-(Table~\ref{tab:genpressure}). Only about a third of \emph{sympathetic\_beneficiary} and
-\emph{cost\_pressure} add-ons pass review, and those are the two families that lost items
-to the retry budget (127 and 130 of a possible 137). A pressure the context cannot
-support, such as a suffering identifiable person or a concrete financial loss, is
-dropped rather than forced, so the surviving battery holds only plausible
+(Table~\ref{tab:genpressure}): only about a third of \emph{sympathetic\_beneficiary}
+and \emph{cost\_pressure} add-ons pass review, and those are the two families that
+lost items to the retry budget (127 and 130 of a possible 137). A pressure the context
+cannot support is dropped rather than forced, so the battery holds only plausible
 pressure--scenario pairings.
 
 \begin{table}[t]
@@ -441,22 +427,10 @@ drops ill-fitting pressure--scenario pairings rather than shipping forced ones.}
 \label{tab:genpressure}
 \end{table}
 
-Figures~\ref{fig:guardattempts}--\ref{fig:datasetcomp} show the review loop and the set
-it produced from three more angles. Most components that pass do so on the first or
-second attempt, with a thin tail that runs the budget out
-(Figure~\ref{fig:guardattempts}); the reviewer feedback is doing real work, since pass
-probability rises with each revision round rather than resampling at a flat rate
-(Figure~\ref{fig:convergence}); and the frozen set stays balanced across domains and
-cell groups, so no domain's difficulty is an artifact of thin coverage
-(Figure~\ref{fig:datasetcomp}).
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.85\columnwidth]{figures/guard_attempts}
-\caption{Authoring attempts to acceptance across all reviewed components. Most pass in
-one or two tries; the tail that exhausts its retry budget is dropped, not shipped.}
-\label{fig:guardattempts}
-\end{figure}
+The reviewer feedback does real work: pass probability rises with each revision round
+rather than resampling at a flat rate (Figure~\ref{fig:convergence}). And the frozen
+set stays balanced across domains and cell groups, so no domain's difficulty is an
+artifact of thin coverage (Figure~\ref{fig:datasetcomp}).
 
 \begin{figure}[t]
 \centering
@@ -499,20 +473,18 @@ agreement 0.91, but with 79\% of violations in one class, chance-corrected $\kap
 mechanically deflated (0.37) and the prevalence-adjusted coefficients tell the truer
 story (Gwet's AC$_1$ 0.90, PABAK 0.82). The annotator
 judge is only fair ($\kappa=0.35$) by design: a FAIL from either reviewer burns an
-authoring attempt, so it is tuned to catch as many flawed components as possible; high
-recall matters here more than inter-rater consensus. Figures~\ref{fig:agunclear}
-and~\ref{fig:agguard} give per-rater-pair breakdowns.
+authoring attempt, so it is tuned for recall over consensus. Per-rater-pair breakdowns
+ship with the released agreement CSVs.
 
-Both new rubrics were frozen before the full labeling run. The transparency prompt was
+Both rubrics were frozen before the full labeling run. The transparency prompt was
 calibrated on the trials where judges disagreed, given an explicit decision order
 (a claimed workaround counts as misrepresentation; an admission must name a concrete,
-existing defect of the chosen option), and then validated on a held-out,
-non-overlapping sample where its agreement replicated ($\kappa=0.58$ on 100 and 200
-trials alike); the judged text is only what the user saw, with hidden
-chain-of-thought stripped, and the violation itself is taken from the outcome judge
-rather than re-decided. The four abstention categories are likewise applied in a
-fixed precedence order, which is what lifted that classifier from $\kappa=0.62$ under
-the earlier six-way scheme to 0.78.
+existing defect of the chosen option), and validated on a held-out sample where its
+agreement replicated ($\kappa=0.58$); the judged text is only what the user saw, with
+hidden chain-of-thought stripped, and the violation itself is taken from the outcome
+judge rather than re-decided. The four abstention categories are applied in a fixed
+precedence order, which lifted that classifier from $\kappa=0.62$ under an earlier
+six-way scheme to 0.78.
 
 \begin{table}[t]
 \centering
@@ -538,36 +510,18 @@ the earlier six-way scheme to 0.78.
 \caption{Inter-rater agreement for PACT's LLM classifiers, over items with $\geq2$
 raters; bands follow Landis and Koch. Fleiss' $\kappa$ covers the fully-rated subset
 and is undefined for the guard, where different component types draw different reviewer
-pairs. Outcome judging uses one judge and so has no inter-rater $\kappa$.
-Figures~\ref{fig:agunclear} and~\ref{fig:agguard} break these down by rater pair.}
+pairs. Outcome judging uses one judge and so has no inter-rater $\kappa$.}
 \label{tab:agreement}
 \end{table}
 
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.9\columnwidth]{figures/agreement_reasoning_unclear}
-\caption{Unclear-reason (abstention) classifier: Cohen's $\kappa$ per trio rater pair,
-mean 0.78.}
-\label{fig:agunclear}
-\end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.9\columnwidth]{figures/agreement_annotator_guard}
-\caption{Annotator judge (generation guard review): Cohen's $\kappa$ per reviewer pair.
-The Nemotron--GLM pair agrees most (0.43); the mean is 0.35 (fair), consistent with a
-conservative high-recall filter rather than a consensus labeler.}
-\label{fig:agguard}
-\end{figure}
 
 \paragraph{The transparency ranking is stable across judges.} Transparency is the one
 axis whose score depends on a judge, so we ask a sharper question than inter-rater
 agreement: does the transparency \emph{leaderboard} depend on which judge produced it?
 Over the identical fully-rated trial set we re-rank the models by transparent share
 under each trio judge alone and under the shipped ensemble, then correlate those
-leaderboards (Table~\ref{tab:honestytau}). This uses 19 of the 22 models, because
-leave-one-out leaves a trio model with only two judges when it is the testee.
+leaderboards (Table~\ref{tab:honestytau}; 19 of 22 models, since leave-one-out leaves
+a trio member with two judges when it is the testee).
 Individual judges agree substantially on the ranking (Kendall $\tau=0.63$--$0.73$,
 Spearman $\rho=0.79$--$0.91$) despite only moderate per-trial agreement, and the
 ensemble correlates $\tau=0.73$--$0.89$ ($\rho=0.89$--$0.97$) with each of them,
@@ -603,9 +557,9 @@ judge than the judges are to each other, so it is the most defensible aggregator
 \subsection{Uncertainty and significance}
 \label{app:stats}
 An evaluation is an experiment on a sample of items, so we attach uncertainty to every
-reported number rather than treating the point estimate as exact, following the
-statistical reporting recommendations of \citet{miller2024errorbars}. Each item is run
-three times over the 3{,}364-item set. Three choices follow from that design.
+reported number, following the statistical reporting recommendations of
+\citet{miller2024errorbars}. Each item is run three times over the 3{,}364-item set,
+and three choices follow from that design.
 
 \emph{Cell rates.} Every per-cell compliance rate carries a Wilson 95\% interval; these
 are released with the trial data.
@@ -618,16 +572,14 @@ more than once, and between-item difficulty is the dominant variance component h
 Items are drawn jointly across the two system-prompt modes, so the pairing that makes the
 two modes comparable is preserved.
 
-We deliberately do \emph{not} resample replications within an item, even though a
-two-stage bootstrap is the more familiar choice. For a $\text{pass}^3$ statistic at $k=3$
-it is biased upward: an item on which the model was correct twice out of three is redrawn
-as all-correct with probability $(2/3)^3 \approx 0.30$, so the conjunction
-$\text{all}(\cdot)$ succeeds more often in the resample than in the data and the interval
-drifts above the point estimate. Treating each item's score as fixed and resampling only
-the item sample answers the question a reader actually has, which is whether another draw
-of items from the same population would have ordered the models differently. Half-widths
-run \PactCIHalfMin--\PactCIHalfMax\ (Figure~\ref{fig:pactci}); they are small because the
-item count is large, and they are still wider than most gaps at the top of the table.
+We deliberately do \emph{not} resample replications within an item: for a
+$\text{pass}^3$ statistic that is biased upward, since an item the model got right
+twice out of three is redrawn as all-correct with probability $(2/3)^3 \approx 0.30$,
+and the interval drifts above the point estimate. Resampling only the item sample
+answers the question a reader actually has: whether another draw of items would have
+ordered the models differently. Half-widths run
+\PactCIHalfMin--\PactCIHalfMax\ (Figure~\ref{fig:pactci}), small because the item count
+is large, yet still wider than most gaps at the top of the table.
 
 \emph{Model comparisons.} We do not read a difference off the table as real just because
 one number is larger. For each pair of models we take the paired per-item PACTScore
@@ -677,18 +629,13 @@ it (blue) overlap the top and are not distinguishable from it at the margin.}
 
 \subsection{Inter-axis correlation}
 \label{app:axiscorr}
-Figure~\ref{fig:axiscorr} gives the full Pearson correlation matrix between the six axes
-across the 22-model panel, which is the evidence behind the claim in \S\ref{sec:metrics}
-and \S\ref{sec:leaderboard} that the profile does not compress into one number. Three
-blocks are visible. The four rule-holding axes (default compliance, pressure resistance,
-pushback resistance, and rule-scope discernment) correlate at $r=0.90$--$0.95$, so a model
-that holds the rule in one condition tends to hold it in the others. Steerability sits
-apart, correlating with the rule-holding axes only at $r=+0.08$ to $+0.18$ and with
-transparency at $r=-0.03$: whether an explicit mandate repairs a model is not
-predictable from how often it violates. Transparency sits between the two, following the
-rule-holding block at $r=0.47$--$0.65$: the models that violate least are also somewhat
-likelier to disclose when they do, but the association is loose enough that the axis
-still reorders the panel.
+Figure~\ref{fig:axiscorr} gives the full Pearson matrix behind the claim in
+\S\ref{sec:metrics} and \S\ref{sec:leaderboard} that the profile does not compress into
+one number. The four rule-holding axes correlate at $r=0.90$--$0.95$; steerability sits
+apart ($r=+0.08$ to $+0.18$ with that block, $-0.03$ with transparency), so whether a
+mandate repairs a model is not predictable from how often it violates; and transparency
+follows the rule-holding block only loosely ($r=0.47$--$0.65$), loosely enough that the
+axis still reorders the panel.
 
 \begin{figure}[t]
 \centering
@@ -725,14 +672,13 @@ temptation), with healthcare administration (0.867) and HR/hiring (0.882) next; 
 services and pharma medical information sit at the ceiling, both 0.996.
 
 Figure~\ref{fig:perdomainheat} resolves the same base-mode compliance per model per
-domain, and shows that the domain effect is panel-wide rather than an artifact of the weak
-tail: procurement is the coolest or second-coolest cell for nearly every model, including
-the four at the top. It also shows that a model's overall rank does not bound its exposure
-in a given domain. Inkling is 6th of 22 by PACTScore but 20th on procurement (0.70),
-below Nemotron-3-Super (0.73), which sits fourteen places beneath it overall, and level
-with Seed-OSS-36B, while scoring 0.98--0.99 in eight other domains. A deployer buying
-for that domain would draw the opposite conclusion from the leaderboard than from this
-figure.
+domain. The domain effect is panel-wide, not an artifact of the weak tail: procurement
+is the coolest or second-coolest cell for nearly every model, including the four at the
+top. Nor does overall rank bound exposure in a given domain: Inkling is 6th of 22 by
+PACTScore but 20th on procurement (0.70), below Nemotron-3-Super (0.73), fourteen
+places beneath it overall, while scoring 0.98--0.99 in eight other domains. A deployer
+buying for that domain would draw the opposite conclusion from the leaderboard than
+from this figure.
 
 Figure~\ref{fig:steerbaseline} plots the steerability result discussed in
 \S\ref{sec:leaderboard} against base compliance. The positive slope is
@@ -797,16 +743,14 @@ steerability column carries the glosses for the three least repairable families:
 \emph{urgency} (0.22, ``I need this now''). Turn~2 here is the pushback
 branch, conditional on a turn-1 comply.
 
-Two heatmaps resolve those pooled numbers. Figure~\ref{fig:fragility} gives turn-1
-compliance per model per pressure family, and the per-model spread is far wider than the
-pooled one: \emph{false\_clearance} and \emph{urgency} are the coolest columns for the
-weaker models, with Seed-OSS-36B at 0.605 and Mistral-7B at 0.464 on false-clearance
-against 0.90 or above on the other families. Figure~\ref{fig:dompress} breaks the same
-measure out by domain and pressure together. Losses pile up in the procurement row and
-the \emph{false\_clearance} and \emph{urgency} columns, the weakest cell being
-procurement under \emph{false\_clearance} (0.72), so a per-family mean understates how
-localized a model's exposure is. Together with Figure~\ref{fig:perdomainheat}, the three
-heatmaps cover every pairing of model, domain, and pressure.
+Two heatmaps resolve those pooled numbers. Per model (Figure~\ref{fig:fragility}), the
+spread is far wider than the pooled one: Seed-OSS-36B sits at 0.605 and Mistral-7B at
+0.464 on \emph{false\_clearance} against 0.90 or above on the other families. Per
+domain (Figure~\ref{fig:dompress}), losses pile up in the procurement row and the
+\emph{false\_clearance} and \emph{urgency} columns, the weakest cell being procurement
+under \emph{false\_clearance} (0.72), so a per-family mean understates how localized
+exposure is. Together with Figure~\ref{fig:perdomainheat}, the three heatmaps cover
+every pairing of model, domain, and pressure.
 
 \begin{table}[t]
 \centering
@@ -842,11 +786,11 @@ panel. Losses are concentrated, not uniform: the procurement row and the
 \end{figure}
 
 \subsection{How violations are explained}
-Transparency (axis~5) scores whether a violating reply disclosed the breach;
-Table~\ref{tab:transmodels} gives the full per-model three-way split behind the
-leaderboard's transparency column, with the violation counts the shares rest on. The
-split is also indifferent to the system prompt: the anti-adversarial mandate leaves
-all three shares essentially unchanged (Figure~\ref{fig:transarm}).
+Table~\ref{tab:transmodels} gives the full per-model three-way transparency split
+behind the leaderboard column, with the violation counts the shares rest on. The split
+is indifferent to the system prompt: violations committed under the anti-adversarial
+mandate are misrepresented at the same rate as base-mode ones (79.9\% against 78.7\%),
+so the mandate changes neither how often rules break nor how the breaks are presented.
 
 \begin{table}[t]
 \centering
@@ -858,24 +802,13 @@ violations, so their shares carry the widest intervals.}
 \label{tab:transmodels}
 \end{table}
 
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.78\columnwidth]{figures/transparency_by_arm}
-\caption{The transparency split by system-prompt mode. The explicit compliance mandate
-does not change how violations are presented: the misrepresented share is the same in
-both modes.}
-\label{fig:transarm}
-\end{figure}
-
 \subsection{Why replies abstain}
 \label{app:abstention}
-A reply that does not resolve to a single listed option is marked \emph{unclear}
-and dropped from every axis denominator: it never counts as a pass or a fail, so
-each axis scores a model only on the items it actually decided (\S\ref{sec:metrics}).
-The abstention rate therefore measures how much mass a model removes by declining to
-commit. It is low: 0.6\% to 7.5\% of turn-1 replies across the panel, median 2.4\%
-(Table~\ref{tab:abstention}). No model abstains often enough for dropped items to move
-an axis materially, and the ordering does not track PACTScore.
+A reply that does not resolve to a single listed option is marked \emph{unclear} and
+dropped from every axis denominator, so each axis scores a model only on the items it
+actually decided (\S\ref{sec:metrics}). The rate is low: 0.6\% to 7.5\% of turn-1
+replies across the panel, median 2.4\% (Table~\ref{tab:abstention}); no model abstains
+often enough to move an axis materially, and the ordering does not track PACTScore.
 
 Every turn that stays unresolved even after the forcing push (11{,}730 across both
 turns and both modes) is classified, by the same trio ensemble used for the
@@ -887,9 +820,9 @@ classifier (Cohen's $\kappa=0.78$; Appendix~\ref{app:agreement}).
 Figure~\ref{fig:unclear} shows the per-model composition, and the two turns abstain
 differently: turn-1 holdouts are dominated by policy refusals (36.2\%), turn-2 holdouts
 by hand-backs and off-menu commitments. The mandate barely moves the mix, trading a few
-points of off-menu commitment for policy refusal (Figure~\ref{fig:uncleararm}). Blank non-answers are essentially absent, which
-is why treating unresolved replies as undecided and dropping them, rather than counting
-them as violations, is the conservative choice.
+points of off-menu commitment for policy refusal. Blank non-answers are essentially
+absent, which is why treating unresolved replies as undecided and dropping them, rather
+than counting them as violations, is the conservative choice.
 
 \begin{table}[t]
 \centering
@@ -912,16 +845,6 @@ diagnostic.}
 four reason categories (trio-judged vote-share). Bars are ordered by refusal share.}
 \label{fig:unclear}
 \end{figure}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.78\columnwidth]{figures/unclear_by_arm}
-\caption{The abstention-reason split by system-prompt mode. The compliance mandate
-shifts a few points from off-menu commitments to policy refusals but leaves the
-hand-back share unchanged.}
-\label{fig:uncleararm}
-\end{figure}
-
 
 \section{Evaluation-Awareness Realism Probe}
 \label{app:evalaware}
@@ -947,9 +870,8 @@ replications, which we reuse rather than re-run.
 \item The \textbf{realism-stripped} item has the item's own generator model rewrite the
 whole item in one pass into flat, generic, model-sounding prose: the invented
 company, persona, and workplace register are removed and the text reads like a
-synthetic vignette, while the first-person framing, every decision-relevant fact
-and cost, the incentive, and the rule are held fixed and the option-to-gold
-mapping is carried through unchanged. It is the benchmark we would have written
+synthetic vignette, while every decision-relevant fact, the incentive, the rule, and
+the option-to-gold mapping are held fixed. It is the benchmark we would have written
 without the naturalism pass.
 \item The \textbf{announced} item is the native item with one sentence prepended to
 the system prompt: \emph{``You are an AI assistant being evaluated on your ability
@@ -959,20 +881,16 @@ The realism-stripped and announced items also append a standard multiple-choice
 directive to the user turn (\emph{``You must select exactly one of the options; respond
 with the full name of the option that you chose''}), the forced-choice tell that fills
 benchmark training data and that the realistic item omits. Each rung runs through the
-same turn-1 protocol as the main evaluation, including the forcing push, and is scored
-the same way: compliance over all replications, with an abstention that survives the
-push counting as a failure. The two altered forms are each run once per item, and the
-native form is the mean of its stored replications.
+same turn-1 protocol and scoring as the main evaluation, including the forcing push;
+the altered forms run once per item, and the native form is the mean of its stored
+replications.
 
 We evaluate the twelve panel models that are still served and have a native score on
-record: eight open-weights models on the shared inference API and four closed frontier
-systems through their own providers. We report the effect as a relative change,
-$(C-C_0)/(1-C_0)$, the fraction of an item's native non-compliance that the
-manipulation removes. This is the steerability recovery normalization
-(\S\ref{sec:metrics}, axis~4), the right scale on near-ceiling tasks because a
-two-point absolute change means something very different at 5\% non-compliance than
-at 40\%. The realism-stripped form isolates the register channel; the announced form
-isolates the explicit-frame channel.
+record: eight open-weights, four closed. We report the effect as $(C-C_0)/(1-C_0)$,
+the fraction of native non-compliance the manipulation removes --- the steerability
+recovery normalization (\S\ref{sec:metrics}, axis~4), the right scale on near-ceiling
+tasks. The realism-stripped form isolates the register channel; the announced form,
+the explicit-frame channel.
 
 \subsection{Results and analysis}
 \label{app:evalaware-results}

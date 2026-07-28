@@ -486,10 +486,10 @@ def main(argv: Optional[List[str]] = None) -> None:
         make_figure(rep_u, titles["reasoning_unclear"],
                     "Reasoning classifier. TAXONOMY_TRIO leave-one-out on first-turn abstentions; "
                     "'ext' pairs involve the swapped-out gpt-oss-120b cross-check rater.",
-                    "agreement_reasoning_unclear.png")
+                    "agreement_reasoning_unclear.png", to_paper=False)
         make_figure(rep_g, titles["annotator_guard"],
                     "Annotator judge. Two non-authoring trio models vote PASS/FAIL per generated component.",
-                    "agreement_annotator_guard.png")
+                    "agreement_annotator_guard.png", to_paper=False)
         print(f"\n  figures -> {FIG_DIR} (and {PAPER_FIG_DIR})")
 
 
