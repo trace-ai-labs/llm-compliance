@@ -2,7 +2,8 @@
 and pressure families. Pure regroups of the trial records (no API, no re-run of
 anything upstream). Emits:
 
-  results/benchmark/dist_domain_axis.csv   domain x 5 axes (panel mean)
+  results/benchmark/dist_domain_axis.csv   domain x 6 axes (cell axes panel-mean;
+                                           transparency pooled over panel violations)
   results/benchmark/dist_pressure.csv      pressure family x {t1 comply, t2 hold, steer}
   results/benchmark/figures/domain_pressure_heatmap.{png,pdf}   t1 comply, domain x pressure
 
@@ -28,8 +29,10 @@ TRIALS_DIR = os.path.join("results", "benchmark", "trials")
 OUT_DIR = os.path.join("results", "benchmark")
 FIG_DIR = os.path.join(OUT_DIR, "figures")
 
-# 5 cell-based axes; honesty is omitted per-domain (too few violations per domain
-# to be stable). Each entry maps a name to a (cells, model) -> Optional[float].
+# The 5 cell-based axes, panel-meaned per domain. Transparency is computed
+# separately (transparency_by_domain): per-model per-domain violation counts are
+# too thin to average, so it pools every judged violation the panel committed in
+# the domain instead. Each entry maps a name to a (cells, model) -> Optional[float].
 AXES = [
     ("default_compliance", lambda cs, m: M.default_compliance(cs, m)),
     ("pressure_resistance", lambda cs, m: M.pressure_resistance(cs, m).p3),
@@ -71,6 +74,28 @@ def _pooled_recovery(base: Sequence[M.Cell], directive: Sequence[M.Cell]
         mass += 1.0 - br
         gain += d[iid] - br
     return gain / mass if mass > 0 else None
+
+
+def transparency_by_domain(trials: List[dict], models: List[str]
+                           ) -> Dict[str, Optional[float]]:
+    """domain -> TRANSPARENT vote-share, pooled over every judged violation the
+    panel committed in the domain (both arms; each trial weighs its judges'
+    votes fractionally, mirroring metrics.transparency's trial selection)."""
+    from src.benchmark.judges import load_transparency_votes
+    votes = load_transparency_votes()
+    keep = set(models)
+    shares: Dict[str, List[float]] = defaultdict(list)
+    for t in trials:
+        if t.get("model") not in keep or not t.get("binds"):
+            continue
+        if not (t.get("t1_outcome") == "violate"
+                or (t.get("t1_outcome") != "violate"
+                    and t.get("t2_outcome") == "violate")):
+            continue
+        v = votes.get(f"{t['model']}||{t['trial_id']}")
+        if v and sum(v.values()):
+            shares[t["domain"]].append(v.get("TRANSPARENT", 0) / sum(v.values()))
+    return {dom: sum(s) / len(s) if s else None for dom, s in shares.items()}
 
 
 def domain_axis_table(cells: Dict, models: List[str]) -> Dict[str, Dict[str, Optional[float]]]:
@@ -287,17 +312,20 @@ def main() -> None:
     models = sorted({m for (m, _, _) in cells if not m.startswith("trivial:")})
     os.makedirs(FIG_DIR, exist_ok=True)
 
-    # 1. domain x axis (+ raw turn-2 pushback hold per domain, for the prose)
+    # 1. domain x axis (+ raw turn-2 pushback hold per domain, for the prose).
+    # Transparency rides along, pooled per domain over the panel's violations.
     da = domain_axis_table(cells, models)
     axis_names = [n for n, _ in AXES]
+    tbd = transparency_by_domain(trials, models)
     t2_by_domain = {
         dom: _pooled_rate([c for (m, a, _), c in cells.items()
                            if a == "base" and c.domain == dom and m in models],
                           "t2_pushback")
         for dom in da}
     _write_csv(os.path.join(OUT_DIR, "dist_domain_axis.csv"),
-               ["domain"] + axis_names + ["turn2_hold"],
-               [[dom] + [da[dom][a] for a in axis_names] + [t2_by_domain[dom]]
+               ["domain"] + axis_names + ["transparency", "turn2_hold"],
+               [[dom] + [da[dom][a] for a in axis_names]
+                + [tbd.get(dom), t2_by_domain[dom]]
                 for dom in da])
 
     # 2. pressure family x {t1, t2, steer}
@@ -356,9 +384,12 @@ def main() -> None:
     print("\n== domain x axis (panel mean) ==")
     for dom in sorted(da, key=lambda d: (da[d]["default_compliance"] or 9)):
         r = da[dom]
-        print(f"  {short_domain(dom):14s} " +
+        tv = tbd.get(dom)
+        # thin-space labels break cp1252 consoles; plain space for the printout
+        print(f"  {short_domain(dom).replace(chr(0x2009), ' '):14s} " +
               " ".join(f"{a[:4]}={r[a]:.2f}" if r[a] is not None else f"{a[:4]}=n/a"
-                       for a in axis_names))
+                       for a in axis_names) +
+              (f" tran={tv:.3f}" if tv is not None else " tran=n/a"))
     print("\n== pressure family ==")
     for p in sorted(pt, key=lambda p: (pt[p]["t1_comply"] or 9)):
         r = pt[p]
