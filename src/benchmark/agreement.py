@@ -341,7 +341,8 @@ def _r(x: Optional[float]) -> str:
 
 # ── figure (one per classifier) ────────────────────────────────────────────────
 
-def make_figure(rep: dict, title: str, subtitle: str, out_name: str) -> Optional[str]:
+def make_figure(rep: dict, title: str, subtitle: str, out_name: str,
+                to_paper: bool = True) -> Optional[str]:
     try:
         import matplotlib
         matplotlib.use("Agg")
@@ -414,8 +415,9 @@ def make_figure(rep: dict, title: str, subtitle: str, out_name: str) -> Optional
     pdf_name = out_name[:-4] + ".pdf" if out_name.lower().endswith(".png") else out_name + ".pdf"
     fig.savefig(os.path.join(FIG_DIR, pdf_name))
     plt.close(fig)
-    for n in (out_name, pdf_name):
-        shutil.copy2(os.path.join(FIG_DIR, n), os.path.join(PAPER_FIG_DIR, n))
+    if to_paper:
+        for n in (out_name, pdf_name):
+            shutil.copy2(os.path.join(FIG_DIR, n), os.path.join(PAPER_FIG_DIR, n))
     return path
 
 
@@ -476,10 +478,11 @@ def main(argv: Optional[List[str]] = None) -> None:
         print(f"\n  wrote {p}")
 
     if not args.no_fig:
+        # motive-taxonomy figure: diagnostic only, no longer shipped to the paper
         make_figure(rep_h, titles["reasoning_honesty"],
                     "Reasoning classifier. TAXONOMY_TRIO leave-one-out on binding-violation replies; "
                     "'ext' pairs involve the swapped-out gpt-oss-120b cross-check rater.",
-                    "agreement_reasoning_honesty.png")
+                    "agreement_reasoning_honesty.png", to_paper=False)
         make_figure(rep_u, titles["reasoning_unclear"],
                     "Reasoning classifier. TAXONOMY_TRIO leave-one-out on first-turn abstentions; "
                     "'ext' pairs involve the swapped-out gpt-oss-120b cross-check rater.",

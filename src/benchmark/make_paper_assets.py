@@ -65,7 +65,6 @@ PAPER_FIGURES = [
     "axis_correlation.png",  # methodology: the axes group into three factors
     "radar.png",             # appendix: all-22 small-multiples profile
     "per_domain.png",        # appendix: per-domain base compliance
-    "honesty_taxonomy.png",  # appendix: silent / rationalized / defiant split
     "unclear_taxonomy.png",  # appendix: 4-way reason-for-abstention split
     "transparency_by_arm.png",  # appendix: the 3-way split, base vs anti-adversarial
     "unclear_by_arm.png",       # appendix: the 4-way split, base vs anti-adversarial
@@ -186,6 +185,8 @@ def build_model_table(rows: List[dict]) -> str:
                          r"(no published parameter counts)}} \\")
             seen_closed = True
         name = FS.DISPLAY_NAME.get(m, m.split("/")[-1]).replace("&", r"\&")
+        if "instruct" in m.lower():
+            name = f"\\textit{{{name}}}"
         prov = meta["provider"].replace("&", r"\&")
         note = meta["note"].replace("&", r"\&")
         lines.append(
@@ -211,6 +212,9 @@ def display(model: str) -> str:
     name = FS.DISPLAY_NAME.get(model, model.split("/")[-1])
     # LaTeX-escape the few names that need it (none currently, but be safe)
     name = name.replace("&", r"\&").replace("_", r"\_")
+    # models served as explicit instruct-variant ids are italicized
+    if "instruct" in model.lower():
+        name = f"\\textit{{{name}}}"
     # closed-source models are underlined in the leaderboard
     return f"\\underline{{{name}}}" if FS.is_closed(model) else name
 
