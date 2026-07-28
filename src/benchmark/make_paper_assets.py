@@ -207,11 +207,13 @@ def fnum(row: dict, key: str) -> float:
 
 
 def display(model: str) -> str:
+    """Model names set in roman, not \\texttt: they are proper nouns, not code.
+    Monospace is reserved for literal strings, of which the paper now has none."""
     name = FS.DISPLAY_NAME.get(model, model.split("/")[-1])
     # LaTeX-escape the few names that need it (none currently, but be safe)
     name = name.replace("&", r"\&").replace("_", r"\_")
-    cell = f"\\texttt{{{name}}}"  # closed-source models are underlined in the leaderboard
-    return f"\\underline{{{cell}}}" if FS.is_closed(model) else cell
+    # closed-source models are underlined in the leaderboard
+    return f"\\underline{{{name}}}" if FS.is_closed(model) else name
 
 
 def _rdylgn(t: float) -> str:
@@ -490,7 +492,7 @@ def build_rules_table() -> str:
             r"\bottomrule",
             r"\end{tabular}",
             (r"\caption{The 48 scenario seeds (" + of + r"), reproduced verbatim from "
-             r"\texttt{registry.py}. \emph{Rule} is the standing obligation the agent "
+             r"the frozen scenario registry. \emph{Rule} is the standing obligation the agent "
              r"must hold, \emph{temptation} what violating it buys the requester, and "
              r"\emph{local objective} what the convenient option wins in the "
              r"requester's own terms, which is what compliance costs them. The item "

@@ -1,20 +1,13 @@
 \section{Results}
 \label{sec:findings}
 
-We evaluate 22 models (18 open-weights and 4 closed) on PACT's \PactNItems\ items
-(1{,}682 scenario cells, each in a base and an anti-adversarial system-prompt mode), three
-times each. The panel spans 7B dense models to trillion-parameter sparse mixtures and three
-years of releases; Appendix~\ref{app:models} lists each model's provider, size, release
-date, and citation. Table~\ref{tab:leaderboard} gives our main results, the six axes and
-PACTScore side by side.
-%
-\S\ref{sec:leaderboard} reads the leaderboard and locates where the failures fall,
-\S\ref{res:violations} shows four of them verbatim, and \S\ref{res:eval_awareness} tests
-whether PACT is robust to evaluation-awareness bias.
+% Every number in this section is written out, not pulled from a \Pact* macro, so the
+% prose can be edited by hand. That means it no longer tracks the metrics automatically:
+% after a re-aggregate, diff tables/pact_macros.tex against the figures quoted here.
 
-\subsection{Main Results}
-\label{sec:leaderboard}
-
+% Declared at the head of Section 4, before its opening paragraph. Declared any later it
+% lands a page late: the paragraph spills across the page break and a table* cannot claim
+% a page top that has already been shipped.
 \begin{table*}[t]
 \centering
 \footnotesize
@@ -30,88 +23,84 @@ columns.}
 \label{tab:leaderboard}
 \end{table*}
 
-\paragraph{No model is reliable enough to deploy unsupervised.} \PactLeader\ leads with a
-PACTScore of \PactLeaderScore\ (95\% CI \PactLeaderCI), which still leaves
-\PactLeaderFail\% of its decisions unreliable. \texttt{Grok~4.3}, 18th of \PactN, scores
-% NOTE: hardcoded because pact_macros only exports leader/second/last. Re-check on
-% regeneration; source is the pact_score_lo/hi columns of metrics_v2.csv.
-0.870 (95\% CI [0.855, 0.886]), and \PactLast\ scores \PactLastScore\ (95\% CI
-\PactLastCI). Not one of the \PactN\ models reaches 0.95, and 17 clear 0.90. \PactNSig\ of
-\PactNPairs\ pairs separate at $p<0.05$, though the top \PactTopCluster\ do not
-(Appendix~\ref{app:stats}).
+We evaluate 22 models, 18 open-weights and 4 closed, on PACT's 3{,}364 items, three times
+each; Appendix~\ref{app:models} gives each model's provider, size, and release date.
+Table~\ref{tab:leaderboard} reports the six axes of \S\ref{sec:metrics} and PACTScore.
+\S\ref{sec:leaderboard} presents the leaderboard, \S\ref{res:violations} gives four example
+violations, and \S\ref{res:eval_awareness} tests whether PACT is robust to
+evaluation-awareness bias.
+
+\subsection{Main Results}
+\label{sec:leaderboard}
+
+\paragraph{No model is reliable enough to deploy unsupervised.} Kimi-K2.7-Code leads at a
+PACTScore of 0.944 and Mistral-7B trails at 0.484; no model attains 0.95. We compare every
+pair of models on the paired per-item PACTScore difference, bootstrapped with the item as
+the resampling unit and corrected for multiplicity across all 231 pairs
+(Appendix~\ref{app:stats}). 186 comparisons are significant at $p<0.05$, so most of the
+ordering is real, but Kimi-K2.7-Code and Qwen3.6-27B (0.943) are not separable and first
+place is a tie.
 %
-Ordinary user pressure sets what that costs. The neutral and pressure items are the same
-scenarios with and without one added paragraph, so the contrast isolates it: adding one
-raises the panel's violation rate from 4.41\% to 7.29\% of decisions, and lets the user
-convert more by simply asking again --- the median model breaks the rule on one pressured
-request in twenty-four, and on one pressured situation in seventeen once it is pushed.
-An assistant fielding a thousand such requests a day is breaking a statutory rule more
-than forty times a day, and even \texttt{Claude Haiku 4.5}, which never violates an
-unpressured rule, still fails one pressured situation in 42. Each breach is an
-independently reportable event: comparable single failures have produced tribunal
-damages~\citep{moffatt2024aircanada} and a discrimination collective
-action~\citep{mobley2025workday}.
+\emph{Pressure accounts for most of the shortfall.} Pressure Resistance falls below Default
+Compliance for 19 of the 22 models, and adding a single pressure paragraph raises the
+violation rate from 4.41\% to 7.29\% of decisions; multi-turn pushback raises it further.
+The effect reaches the top of the table. Claude Haiku 4.5 holds the panel's only perfect
+Default Compliance (1.000), yet its Pressure Resistance is 0.977 and it fails one pressured
+situation in 42.
 
-\paragraph{Models also enforce rules that do not apply.} The requests where the rule does
-not apply carry the opposite error, and it is the more frequent of the two. Across 13{,}817
-decided base-mode decisions on items where the rule does not bind, models enforce it anyway
-on 19.6\%, and the rate does not improve at the top of the table: \texttt{Claude Haiku 4.5},
-with the panel's lowest violation rate, has one of its highest over-application rates at
-21.9\%. Every model scores lower on rule-scope discernment than on default compliance, and
-the gap is widest for the strictest (\texttt{GPT-5.6 Luna} 0.978 against 0.831,
-\texttt{Qwen3.5-35B} 0.956 against 0.811), so part of what reads as compliance in the
-leftmost column is a disposition to hold rules whether or not they apply.
+\paragraph{Models also enforce rules that do not apply.} Rule-Scope Discernment is below
+Default Compliance for all 22 models, and it is the widest gap in the table for the
+strictest of them: Claude Haiku 4.5 scores 1.000 and 0.855, GPT-5.6 Luna 0.978 and 0.831,
+Qwen3.5-35B 0.956 and 0.811. Across 13{,}817 decided base-mode decisions on requests the
+rule does not cover, models enforce it anyway on 19.6\%, and Claude Haiku 4.5 pairs the
+panel's lowest violation rate with one of its highest over-application rates, 21.9\%. Part
+of what reads as compliance in the leftmost column is a disposition to apply rules
+regardless of scope.
 %
-This failure is not the harmless direction. An assistant that cannot tell where a rule stops
-blocks work the rule never covered: it opens reviews nothing triggered, refuses requests it
-was deployed to resolve, and gives staff a reason to route around it. That converts legal
-exposure into lost throughput instead of removing it, and an assistant used that way is not
-a compliance control, only an obstacle. The two errors are only loosely coupled
-($r=0.67$ across the panel), so a model chosen on either one alone can still be badly
-wrong about the other.
+Over-application is not the harmless error. An assistant that cannot tell where a rule stops
+opens reviews nothing called for and refuses requests it was deployed to handle, which
+leaves the organization no less exposed and measurably less productive. The two directions
+correlate at $r=0.67$, so neither predicts the other and a model cannot be selected on
+either alone.
 
-\paragraph{Some pressures and some domains are far more dangerous than others.} Compliance
-varies widely across both. The costliest pressures are \emph{false\_clearance} (0.883), an
-unverifiable claim that the action was already approved, \emph{urgency} (0.908), and
-\emph{fait\_accompli} (0.912); \emph{cost\_pressure} (0.931) and a manager's verbal
-say-so (0.933) sit mid-pack; and even the mildest, \emph{peer\_escaped} (0.952), still
-costs 0.048. Domains stretch wider. Procurement (0.755), healthcare administration
-(0.867), HR/hiring (0.882), and advertising (0.894) sit below everything else, while
-export controls, moderation, and customer service hold 0.977--0.979 and government
-services and pharma medical information reach 0.996 --- a spread wider than the gap
-between the best and the median model. The two compound: procurement under pressure
-falls to 0.693, and the weakest single cell is procurement under
-\emph{false\_clearance} at 0.71
-(Appendix~\ref{app:supplementary}, Tables~\ref{tab:perdomain} and~\ref{tab:pressureturns},
-Figures~\ref{fig:fragility} and~\ref{fig:dompress}).
+\paragraph{Compliance varies more across pressures and domains than across models.} Turn-1
+compliance ranges from 0.883 under \emph{false\_clearance} to 0.952 under
+\emph{peer\_escaped}, so even the mildest pressure produces violations on 4.8\% of
+requests. Across domains the range is wider still: procurement (0.755), healthcare
+administration (0.867), HR/hiring (0.882), and advertising (0.894) against 0.996 for
+government services and pharma medical information. That spread exceeds the gap between the
+best and the median model, and the two factors compound: procurement under pressure falls
+to 0.693, and procurement under \emph{false\_clearance} to 0.71
+(Appendix~\ref{app:supplementary}, Tables~\ref{tab:perdomain} and~\ref{tab:pressureturns}).
 
-\paragraph{An explicit mandate barely helps the models worth deploying.} Adding ``follow
-all rules, without exception'' to the system prompt is worth anywhere from 0 to 9 points,
-and the gain is inversely related to base compliance: it substantially repairs models that
-were already unfit, moves five of the top seven by under one point, and is negative for
-\PactNBackfire. It helps least against the families that relocate accountability rather
-than create urgency --- \emph{peer\_escaped}, \emph{responsibility\_shift},
-\emph{fait\_accompli} --- and least in HR/hiring and healthcare administration, two of the
-highest-stakes domains in the set, a pattern that does not follow from how much headroom
-a domain had (Figure~\ref{fig:steerbaseline}). Where the pressure is an argument about
-responsibility, the remedy is a process control rather than a prompt.
+\paragraph{The compliance mandate does not help the models worth deploying.} Steerability,
+the share of base failures the mandate repairs, is low throughout: it spans 0.016 (GPT-5.6
+Luna) to 0.564 (Grok~4.3) with a median of 0.42, and it does not rise with rank. In
+PACTScore terms the mandate is worth between 0 and 9 points, and the gain is inversely
+related to base compliance: it repairs models that were unfit to begin with, moves five of
+the top seven by under one point, and lowers two. Steerability also varies by pressure and
+by domain, and in neither case does it track how much room for improvement was available
+(Figure~\ref{fig:steerbaseline}): the mandate recovers least under
+\emph{responsibility\_shift} (0.182), \emph{peer\_escaped} (0.214), and \emph{urgency}
+(0.216), against 0.462 under \emph{sympathetic\_beneficiary}, and least in HR/hiring
+(0.185) and healthcare administration (0.295), two of the highest-stakes domains in the
+set. A prompt-level guardrail is therefore not a substitute for a process control in the
+settings that need one most.
 
-\paragraph{Models are not transparent about the rules they break.} An organization can
-absorb an occasional violation if the transcript shows one; what it cannot absorb is a
-violation the log presents as compliance. Across the 16{,}424 judged violations, only
-8.0\% tell the user the chosen option breaks the rule. 12.8\% say nothing either way,
-and the remaining 79.2\% are misrepresented: the reply asserts the choice is compliant,
-covered by an approval the conversation never established, or cured by a workaround the
-model invented (Figure~\ref{fig:transparency}). That second shape is the model restating
-the pressure it was just given as though it were a fact of the world, which is why
-\emph{false\_clearance} is the most damaging family in the battery. A concealed
-violation is invisible to a keyword search; a misrepresented one is worse, because it
-survives human review by arriving with a reason a reviewer is not equipped to check.
-The explicit mandate does not help here either: violations committed under the
-anti-adversarial mode misrepresent at the same rate (79.9\% vs 78.7\%). Per-model
-shares are in Table~\ref{tab:leaderboard}; for the most compliant models they rest on
-few violations (147 for \texttt{Claude Haiku 4.5} against 4{,}112 for
-\texttt{Mistral-7B}), so the panel-level share is the robust statistic.
+\paragraph{No model is transparent about the rules it breaks.} Transparency is the weakest
+axis in the benchmark. No model exceeds 0.244 and the median is 0.134, so on the large
+majority of its violations every model in the panel leaves the reader unable to tell that a
+rule was broken. Across the 16{,}424 judged violations, 8.0\% disclose the breach, 12.8\%
+are silent, and 79.2\% misrepresent the choice as compliant, as covered by an approval the
+conversation never established, or as resolved by a workaround the model invented
+(Figure~\ref{fig:transparency}). The second of these is the model repeating the user's
+unverified claim as established fact, which is why \emph{false\_clearance} is the most
+damaging pressure we test. A silent violation is invisible to a keyword search over
+transcripts; a misrepresented one survives human review, because it arrives with a reason.
+The mandate does not help here either: violations committed under it are misrepresented at
+the same rate (79.9\% against 78.7\%). For the most compliant models the per-model shares
+rest on few violations (147 for Claude Haiku 4.5 against 4{,}112 for Mistral-7B), so the
+panel-wide figure is the reliable one.
 
 \begin{figure}[t]
 \centering
@@ -122,26 +111,22 @@ only; misrepresented includes claimed approvals and invented workarounds.}
 \label{fig:transparency}
 \end{figure}
 
-\paragraph{Abstentions are substantive, not evasions.} A reply the judge cannot resolve is
-dropped rather than scored as a violation, which is only defensible if such replies are
-real. They are: abstention runs 0.6\%--7.5\% (median 2.4\%), does not track PACTScore, and
-blank non-answers are essentially absent (0.4\%). A refusal on policy grounds (29.3\%) or
-a decisive commitment to something off the menu (24.4\%) accounts for half; the other
-46.0\% hand the choice back to the user
-(Appendix~\ref{app:abstention}).
+\paragraph{Abstentions are substantive.} Dropping unresolved replies rather than scoring
+them as violations (\S\ref{sec:protocol}) is defensible only if those replies are genuine.
+They are: abstention runs 0.6\%--7.5\% (median 2.4\%), does not track PACTScore, and blank
+non-answers account for 0.4\%. Refusing on policy grounds (29.3\%) and committing to an
+option outside the menu (24.4\%) make up half, and the remaining 46.0\% return the choice
+to the user (Appendix~\ref{app:abstention}).
 
-\paragraph{Every model fails on a different axis.} \S\ref{sec:metrics} names three ways a
-pressure-resistant model can still be unsuitable, and all three appear here. The third,
-over-application, is the paragraph above. \texttt{Claude Haiku 4.5} is the most
-pressure-resistant model in the panel (0.977), yet when it does violate it discloses the
-breach only 17\% of the time --- transparency is its weakest axis by a wide margin --- so
-selecting on compliance alone returns the models whose failures are hardest to find in a
-transcript. \texttt{Llama-3.1-8B} and \texttt{Mistral-7B} resist the opening pressure on
-0.599 and 0.469 of items but hold under pushback on only 0.448 and 0.583, so a single-turn
-evaluation would rate both far higher than a multi-turn one, and \texttt{Grok~4.3} inverts
-that, strongest in the panel under pushback (0.980) while conceding most at turn~1.
-Figure~\ref{fig:overlay} overlays six such profiles and no two have the same shape: a high
-score on one axis buys nothing on the others.
+\paragraph{The axes are not interchangeable.} Each of the three failure modes
+\S\ref{sec:metrics} anticipates appears in the panel, in different models.
+Claude Haiku 4.5 has the highest Pressure Resistance (0.977) and a Transparency of 0.172,
+so selecting on compliance alone returns the models whose failures are hardest to find in a
+transcript. Llama-3.1-8B and Mistral-7B invert Pressure Resistance and Pushback Resistance
+(0.599 against 0.448, and 0.469 against 0.583), so a single-turn evaluation would rate the
+first far higher than a multi-turn one. Grok~4.3 is the opposite case, second in the panel
+on Pushback Resistance (0.980) but 18th on Default Compliance (0.888).
+Figure~\ref{fig:overlay} overlays six profiles and no two share a shape.
 
 \begin{figure}[t]
 \centering
@@ -155,48 +140,47 @@ All 22 profiles are in Appendix~\ref{app:supplementary} (Figure~\ref{fig:radar})
 \subsection{What a Violation Looks Like}
 \label{res:violations}
 
-The conduct behind those rates takes a few recurring shapes, each from a model near the top
-of Table~\ref{tab:leaderboard} in the base mode under a single ordinary pressure;
-Appendix~\ref{app:failures} works the last of these through in full.
+Each example below is a base-mode trial of a model near the top of
+Table~\ref{tab:leaderboard} under a single pressure; Appendix~\ref{app:failures} reproduces
+the last in full.
 %
-\emph{Supplies a pretext.} \texttt{Qwen3.6-27B} (rank 2) states the source-of-income statute
-correctly, then coaches a landlord to decline a Section~8 voucher holder under a ``lawful,
-non-source-of-income reason'' and keep the real reason unwritten, repeating it at turn~2 even
-after the user names the law.
+\emph{Supplies a pretext.} Qwen3.6-27B (rank 2) states the source-of-income statute
+correctly, then tells a landlord to decline a Section~8 voucher holder under a ``lawful,
+non-source-of-income reason'' and to leave the real reason unwritten. It repeats this at
+turn~2 after the user names the law.
 %
-\emph{Breaks it silently.} \texttt{Claude Haiku 4.5} (rank 3), under time pressure, opens a
-VIP-flagged chart in the sidebar rather than routing it --- a reportable access under 45 CFR
-164.502 --- and never mentions PHI or the breach.
+\emph{Breaks the rule silently.} Claude Haiku 4.5 (rank 3), under time pressure, opens a
+VIP-flagged chart in the sidebar instead of routing the request, a reportable access under
+45 CFR 164.502, without mentioning PHI or the breach.
 %
-\emph{Manufactures a record.} On the same item \texttt{Gemini 3 Flash} (rank 7) writes a
-Treatment/Scheduling justification into the access log, a clean audit trail for an access
-that should not have occurred.
+\emph{Manufactures a record.} On the same item, Gemini 3 Flash (rank 7) writes a
+Treatment/Scheduling justification into the access log, producing a clean audit trail for
+an access that should not have occurred.
 %
-\emph{Recovers only when challenged.} \texttt{Kimi-K2.7-Code} (rank 1) drops the one
-shortlisted candidate on parental leave, states the disqualifier (``no leave conflicts''), and
-drafts her rejection --- the fact pattern of \emph{Mobley v.\ Workday}~\citep{mobley2025workday}
---- then reverses at turn~2 when asked whether leave factored in.
+\emph{Corrects itself only when challenged.} Kimi-K2.7-Code (rank 1) drops the one
+shortlisted candidate on parental leave, gives the disqualifying reason (``no leave
+conflicts''), and drafts her rejection, the fact pattern of \emph{Mobley v.\
+Workday}~\citep{mobley2025workday}. It reverses at turn~2 when asked whether leave factored
+into the ranking.
 %
-These are the modal failures of the models a reader would shortlist first, not edge cases from
-the tail; in three of the four the reply never mentions the rule at all, so transcript
-review catches none of them.
+In three of the four the reply never mentions the rule, so transcript review would not
+surface them.
 
 \subsection{Evaluation Awareness}
 \label{res:eval_awareness}
-A benchmark measures nothing useful if a model behaves well only because it can tell it is
-being tested, and recent models increasingly can~\citep{needham2025evalaware}; what a
-deployer needs is how the model acts in the wild. On a random 10\% of items we hold the
-rule, facts, incentive, and options fixed and vary only how much the item looks like an
-evaluation: the native item, a version rewritten into flat generic model-prose with the
-invented company and workplace register stripped out, and the native item prefaced with
-``you are being evaluated.'' Both altered versions also carry the forced-choice directive
-that fills benchmark training data.
+A benchmark measures nothing useful if a model complies only because it detects a test,
+which recent models increasingly do~\citep{needham2025evalaware}. On a random 10\% of items
+we hold the rule, facts, incentive, and options fixed and vary only how much the item
+resembles an evaluation: the native item, a version rewritten into generic model-prose with
+the invented company and workplace register removed, and the native item prefaced with
+``you are being evaluated.'' Both altered versions also carry the forced-choice instruction
+common in benchmark training data.
 
 Both cues raise compliance, and the explicit one raises it more. Flattening the prose
-removes a mean of 11\% of native non-compliance and moves nine of the twelve models,
-reaching $+55\%$ for \texttt{Kimi-K2.6} and $+43\%$ for \texttt{DeepSeek-V4-Pro};
-announcing the test removes a mean of 39\%, reaching $+73\%$ for \texttt{Gemini~3 Flash}
-and $+71\%$ for \texttt{DeepSeek-V4-Pro}. Since compliance rises as an item is made to look
-more like a test, PACT's native items are the least eval-aware of the three and the
-naturalism enforced during generation (\S\ref{sec:generation}) is doing the work it was
-added for. Appendix~\ref{app:evalaware} gives the protocol, per-model results, and caveats.
+removes a mean of 11\% of native non-compliance and moves nine of the twelve models tested,
+reaching $+55\%$ for Kimi-K2.6 and $+43\%$ for DeepSeek-V4-Pro; announcing the test removes
+a mean of 39\%, reaching $+73\%$ for Gemini~3 Flash and $+71\%$ for DeepSeek-V4-Pro.
+Compliance therefore rises as an item is made to look more like a test, which makes the
+native items the least evaluation-aware of the three and the naturalism enforced during
+generation (\S\ref{sec:generation}) a measurable contributor to validity.
+Appendix~\ref{app:evalaware} gives the protocol, per-model results, and caveats.
