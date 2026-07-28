@@ -446,10 +446,10 @@ def build_abstention_table(rows: List[dict]) -> str:
     left, right = pairs[:half], pairs[half:]
     for i in range(half):
         lm, lv = left[i]
-        lcell = f"{lm} & {lv * 100:.1f}\\%"
+        lcell = f"{lm} & {lv:.3f}"
         if i < len(right):
             rm, rv = right[i]
-            rcell = f"{rm} & {rv * 100:.1f}\\%"
+            rcell = f"{rm} & {rv:.3f}"
         else:
             rcell = " & "
         lines.append(f"{lcell} & {rcell} \\\\")
@@ -728,7 +728,7 @@ def build_domain_axis_table(path: str = DIST_DOMAIN_CSV) -> str:
     ]
     for r in rows:
         cells = [_colcell(fnum(r, c), lo[c], hi[c], ".3f") for c in cols]
-        name = short_domain(r["domain"])
+        name = DOMAIN_ABBR.get(r["domain"], short_domain(r["domain"]))
         lines.append(f"{_tex_escape(name)} & " + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
     return "\n".join(lines)
@@ -749,16 +749,22 @@ PRESSURE_ABBR = {
     "sympathetic_beneficiary": "Symp. Benef.",
     "responsibility_shift": "Resp. Shift",
 }
+# Two tiers: row labels sit horizontally and only trim the two-word names;
+# rotated column headers cut harder so no label runs past ~10 characters.
 DOMAIN_ABBR = {"customer_service": "Cust. Service",
                "export_controls": "Export Ctrl."}
+DOMAIN_HDR_ABBR = {"advertising": "Advert.", "customer_service": "Cust. Svc.",
+                   "export_controls": "Exp. Ctrl.", "gov_services": "Gov. Svc.",
+                   "procurement": "Procure."}
 
 
 def _grid_table(path: str, row_label: str, row_disp, col_disp,
                 row_order=None) -> str:
     """A leaderboard-style shaded grid table from a CSV whose first column is
     the row key and whose remaining columns are rates in [0,1]. Cells print
-    xx.y (x100) and are shaded on one global green-red scale, so the table
-    carries the same story the heatmap did: cool rows/columns stay visible."""
+    0.xxy (matching the leaderboard) and are shaded on one global green-red
+    scale, so the table carries the same story the heatmap did: cool
+    rows/columns stay visible."""
     if not os.path.exists(path):
         return f"% {path} missing - run `python -m src.benchmark.distributions`.\n"
     rows = load_rows(path)
@@ -785,7 +791,7 @@ def _grid_table(path: str, row_label: str, row_disp, col_disp,
                 continue
             v = float(r[c])
             t = (v - lo) / (hi - lo) if hi > lo else 1.0
-            cells.append(f"\\cellcolor[HTML]{{{_rdylgn(t)}}} {100 * v:.1f}")
+            cells.append(f"\\cellcolor[HTML]{{{_rdylgn(t)}}} {v:.3f}")
         lines.append(f"{_tex_label(row_disp(r[row_label]))} & "
                      + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
@@ -979,7 +985,7 @@ def main() -> None:
     ranked = [r["model"] for r in sorted(rows, key=lambda r: -fnum(r, "pact_score"))]
     for fname, src_csv, row_label, row_disp, col_disp, order in (
         ("model_domain.tex", DIST_MODEL_DOMAIN_CSV, "model",
-         display, lambda c: DOMAIN_ABBR.get(c, FS.domain_label(c)), ranked),
+         display, lambda c: DOMAIN_HDR_ABBR.get(c, FS.domain_label(c)), ranked),
         ("model_pressure.tex", DIST_MODEL_PRESSURE_CSV, "model",
          display, lambda c: PRESSURE_ABBR.get(c, FS.pressure_label(c)), ranked),
         ("domain_pressure.tex", DIST_DOMAIN_PRESSURE_CSV, "domain",
