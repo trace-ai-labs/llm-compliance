@@ -56,6 +56,7 @@ import csv
 import json
 import os
 import random
+import shutil
 from typing import Dict, List, Optional, Tuple
 
 from src.benchmark.batch import BatchRequest, call_one, resolve_model, run_batch
@@ -358,12 +359,15 @@ def run_rung(model: str, variant_items: List[dict], rung: str,
 
 # ── R0 (reuse existing trials) + comparison ──────────────────────────────────
 
-def r0_rates(model: str, item_ids: set,
-             trials_dir: str = TRIALS_DIR) -> Dict[str, Tuple[int, int]]:
+def r0_rates(model: str, item_ids: set, trials_dir: str = TRIALS_DIR,
+             gold_override: Optional[Dict[str, dict]] = None
+             ) -> Dict[str, Tuple[int, int]]:
     """{item_id: (n_comply, n_reps)} over the model's EXISTING base-arm reps.
     Denominator is ALL reps: a post-forcing unclear counts as a fail (comply /
     total), matching the headline metric. R1/R2 are forced the same way, so both
-    sides treat 'wouldn't pick even when pushed' identically."""
+    sides treat 'wouldn't pick even when pushed' identically. Trial files on disk
+    predate the corpus corrections, so rows whose item is in `gold_override`
+    (a gold-flipped item) are re-scored from their stored choice."""
     path = os.path.join(trials_dir, f"{safe_name(resolve_model(model))}.jsonl")
     agg: Dict[str, List[int]] = {}
     if not os.path.exists(path):
@@ -381,12 +385,20 @@ def r0_rates(model: str, item_ids: set,
                 continue
             a = agg.setdefault(row["item_id"], [0, 0])
             a[1] += 1
-            if row.get("t1_outcome") in ("comply", "overcomply"):
+            out = row.get("t1_outcome")
+            if gold_override and row["item_id"] in gold_override:
+                out = resolve_outcome(row.get("t1_choice"),
+                                      gold_override[row["item_id"]])
+            if out in ("comply", "overcomply"):
                 a[0] += 1
     return {k: (v[0], v[1]) for k, v in agg.items()}
 
 
-def _rung_outcomes(model: str, rung: str) -> Dict[str, str]:
+def _rung_outcomes(model: str, rung: str,
+                   gold_override: Optional[Dict[str, dict]] = None
+                   ) -> Dict[str, str]:
+    """`gold_override` re-scores a stored run's choice against corrected gold
+    (keyed by item_id, in that rung's own option namespace)."""
     path = _runs_path(model, rung)
     out: Dict[str, str] = {}
     if not os.path.exists(path):
@@ -396,7 +408,11 @@ def _rung_outcomes(model: str, rung: str) -> Dict[str, str]:
             line = line.strip()
             if line:
                 row = json.loads(line)
-                out[row["item_id"]] = row.get("t1_outcome")
+                o = row.get("t1_outcome")
+                if gold_override and row["item_id"] in gold_override:
+                    o = resolve_outcome(row.get("t1_choice"),
+                                        gold_override[row["item_id"]])
+                out[row["item_id"]] = o
     return out
 
 
@@ -460,6 +476,34 @@ def report(models: List[str], items_path: str, frac: float, seed: int,
     sample = sample_items(items, frac, seed, n)
     sample_ids = {it["item_id"] for it in sample}
 
+    # The sample was drawn from the pre-correction item file (that is what the
+    # R1/R2 runs were made against), so apply the corpus corrections here:
+    # excluded cells leave the comparison, gold-flipped items are re-scored
+    # from every stored choice, R1 in its own rewritten option namespace
+    # (rewrites carry compliance by position).
+    from src.benchmark import corrections as CORR
+    excl = CORR.excluded_ids(sample)
+    flips = CORR.affected_flip_ids(sample)
+    sample_ids -= set(excl)
+    gold_orig: Dict[str, dict] = {}
+    gold_r1: Dict[str, dict] = {}
+    r1_built = load_rewrites(by_id)
+    for iid, (fl, new_cc) in flips.items():
+        if iid not in sample_ids:
+            continue
+        it = by_id[iid]
+        gold_orig[iid] = dict(it["gold"], compliant_choices=new_cc)
+        r1it = r1_built.get(iid)
+        if r1it:
+            cc1 = [r1it["options"][i]["name"]
+                   for i, o in enumerate(it["options"])
+                   if o["compliant"] and o["name"] != fl.option]
+            gold_r1[iid] = dict(r1it["gold"], compliant_choices=cc1)
+    if excl or flips:
+        print(f"corpus corrections: {len(excl)} excluded item(s) dropped, "
+              f"{len(gold_orig)} gold-flipped item(s) re-scored "
+              f"-> {len(sample_ids)} items in the comparison")
+
     os.makedirs(OUT_DIR, exist_ok=True)
     rows_out, summ_out = [], []
     all_dR1, all_dR2 = [], []
@@ -469,9 +513,9 @@ def report(models: List[str], items_path: str, frac: float, seed: int,
     print(header)
     print("-" * len(header))
     for model in models:
-        r0 = r0_rates(model, sample_ids)
-        r1o = _rung_outcomes(model, "r1")
-        r2o = _rung_outcomes(model, "r2")
+        r0 = r0_rates(model, sample_ids, gold_override=gold_orig)
+        r1o = _rung_outcomes(model, "r1", gold_override=gold_r1)
+        r2o = _rung_outcomes(model, "r2", gold_override=gold_orig)
         rows = _model_rows(model, sample_ids, r0, r1o, r2o)
         for iid, d in rows.items():
             rows_out.append({
@@ -575,6 +619,71 @@ def preview(n: int, items_path: str, seed: int, workers: int) -> None:
     print(f"raw rewrite completions cached -> {prev_path}")
 
 
+def figure(summary_path: str = os.path.join(OUT_DIR, "summary.csv"),
+           out_name: str = "eval_awareness") -> str:
+    """Per-model realism-ladder deltas as a diverging barh (paper fig:evalaware),
+    rendered from summary.csv (the `report` command writes it). Effects are the
+    share of native non-compliance removed, dR / (1 - C0); labels use the paper's
+    rung names (realism-stripped / announced), never the R0/R1/R2 codes."""
+    import csv as _csv
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from src.benchmark import figstyle as FS
+    from src.benchmark.batch import MODEL_REGISTRY
+    FS.use_paper_style()
+
+    with open(summary_path, newline="", encoding="utf-8") as f:
+        rows = list(_csv.DictReader(f))
+    recs = []
+    for r in rows:
+        head = 1.0 - float(r["C0"])          # native non-compliance
+        if head <= 0:
+            continue
+        mid = MODEL_REGISTRY.get(r["model"], r["model"])
+        recs.append(dict(name=FS.short(mid), closed=FS.is_closed(mid),
+                         d1=float(r["dR1"]) / head, d2=float(r["dR2"]) / head))
+    recs.sort(key=lambda d: d["d2"])
+
+    y = np.arange(len(recs))
+    fig, ax = plt.subplots(figsize=(7.0, 0.52 * len(recs) + 1.4))
+    for i, d in enumerate(recs):
+        ax.barh(i + 0.19, d["d2"], height=0.36,
+                color=FS.RED if d["closed"] else FS.BLUE, zorder=3)
+        ax.barh(i - 0.19, d["d1"], height=0.36, color="#9ca3af", zorder=3)
+    ax.axvline(0, color=FS.INK, lw=1.0, zorder=4)
+    ax.set_yticks(y)
+    ax.set_yticklabels([d["name"] for d in recs], fontsize=9)
+    ax.xaxis.set_major_formatter(
+        plt.FuncFormatter(lambda v, _: f"{v * 100:.0f}%"))
+    ax.set_xlabel("Share of native non-compliance removed")
+    handles = [plt.Rectangle((0, 0), 1, 1, color=FS.BLUE),
+               plt.Rectangle((0, 0), 1, 1, color=FS.RED),
+               plt.Rectangle((0, 0), 1, 1, color="#9ca3af")]
+    ax.legend(handles, ["announced  (open-weights)", "announced  (closed)",
+                        "realism-stripped"],
+              fontsize=8, loc="lower right", frameon=False)
+    ax.grid(axis="x", color=FS.GRID, lw=0.8)
+    ax.set_axisbelow(True)
+    FS.strip_axes(ax)
+    fig.tight_layout()
+
+    fig_dir = os.path.join("results", "benchmark", "figures")
+    paper_dir = os.path.join("paper", "figures")
+    os.makedirs(fig_dir, exist_ok=True)
+    os.makedirs(paper_dir, exist_ok=True)
+    out = os.path.join(fig_dir, out_name + ".png")
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    fig.savefig(out[:-4] + ".pdf", bbox_inches="tight")
+    plt.close(fig)
+    for ext in (".png", ".pdf"):
+        shutil.copy2(os.path.join(fig_dir, out_name + ext),
+                     os.path.join(paper_dir, out_name + ext))
+    print(f"wrote {out} (+pdf, copied to {paper_dir})")
+    return out
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -616,6 +725,11 @@ def main() -> None:
     p_rep.add_argument("--frac", type=float, default=DEFAULT_FRAC)
     p_rep.add_argument("-n", type=int, default=None)
 
+    p_fig = sub.add_parser("figure",
+                           help="render the paper's eval-awareness figure "
+                                "from summary.csv (run `report` first)")
+    p_fig.add_argument("--summary", default=os.path.join(OUT_DIR, "summary.csv"))
+
     args = ap.parse_args()
 
     if args.cmd == "preview":
@@ -648,6 +762,8 @@ def main() -> None:
                          args.max_tokens, force=force)
     elif args.cmd == "report":
         report(args.models, args.items, args.frac, args.seed, args.n)
+    elif args.cmd == "figure":
+        figure(args.summary)
 
 
 if __name__ == "__main__":

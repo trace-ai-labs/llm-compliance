@@ -67,10 +67,9 @@ PAPER_FIGURES = [
     "per_domain.png",        # appendix: per-domain base compliance
     "honesty_taxonomy.png",  # appendix: silent / rationalized / defiant split
     "unclear_taxonomy.png",  # appendix: 4-way reason-for-abstention split
-    "transparency_pie.png",     # transparency: TRANSPARENT/CONCEALED/MISREPRESENTED split
-    "transparency_by_arm.png",  # transparency: the 3-way split, base vs anti-adversarial
-    "unclear_pie.png",          # unclear: 4-way abstention-reason split (still-unclear turns)
-    "unclear_by_arm.png",       # unclear: the 4-way split, base vs anti-adversarial
+    "transparency_by_arm.png",  # appendix: the 3-way split, base vs anti-adversarial
+    "unclear_by_arm.png",       # appendix: the 4-way split, base vs anti-adversarial
+    "eval_awareness.png",       # appendix: realism-ladder deltas (realism_probe figure)
     "agreement_reasoning_unclear.png",  # appendix: unclear judge pair kappas (4-way)
     "guard_attempts.png",            # appendix gendiag: attempts-to-acceptance dist
     "convergence_by_component.png",  # appendix gendiag: pass prob by revision round
@@ -190,7 +189,7 @@ def build_model_table(rows: List[dict]) -> str:
         prov = meta["provider"].replace("&", r"\&")
         note = meta["note"].replace("&", r"\&")
         lines.append(
-            f"\\texttt{{{name}}} & {prov} & {meta['params']} & {meta['rel']} & "
+            f"{name} & {prov} & {meta['params']} & {meta['rel']} & "
             f"{note}~\\citep{{{meta['cite']}}} \\\\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
     return "\n".join(lines)
@@ -377,8 +376,7 @@ def build_pact_macros(rows: List[dict]) -> str:
         "% Every PACTScore figure quoted in the prose lives here, so the text cannot",
         "% drift from results/benchmark/metrics_v2.csv. Regenerate after each aggregate.",
         cmd("PactN", str(len(rk))),
-        cmd("PactLeader", f"\\texttt{{{display(lead['model'])[9:-1]}}}"
-            if False else display(lead["model"])),
+        cmd("PactLeader", display(lead["model"])),
         cmd("PactLeaderScore", f"{fnum(lead, 'pact_score'):.3f}"),
         cmd("PactLeaderCI", _ci(lead)),
         cmd("PactSecond", display(second["model"])),
@@ -532,7 +530,7 @@ def build_trivial_table(path: str = TRIVIAL_CSV) -> str:
             cells.append("n/a" if v != v else f"{v:.3f}")
         p = fnum(r, "pact_score")
         cells.append("n/a" if p != p else f"\\textbf{{{p:.3f}}}")
-        lines.append(f"\\texttt{{{name}}} & " + " & ".join(cells) + r" \\")
+        lines.append(f"{name} & " + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
     return "\n".join(lines)
 
@@ -614,6 +612,57 @@ def field_summary(rows: List[dict]) -> str:
     return "\n".join(out)
 
 
+def dataset_composition_figure(items_path: str = ITEMS_JSONL) -> str:
+    """Frozen-set composition: scenario cells per domain, stacked by cell group
+    (Appendix fig:datasetcomp). Rendered from the frozen item file so the figure
+    can never drift from the corpus the models actually ran."""
+    import json
+    from collections import Counter, defaultdict
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import numpy as np
+    FS.use_paper_style()
+
+    groups = ["neutral", "pressure", "guard_nonbinding",
+              "attack_binding", "attack_nonbinding"]
+    colors = dict(zip(groups, [FS.MUTED, FS.BLUE, FS.GREEN, FS.RED, FS.GOLD]))
+    per: Dict[str, Counter] = defaultdict(Counter)
+    total = 0
+    with open(items_path, encoding="utf-8") as f:
+        for line in f:
+            if not line.strip():
+                continue
+            d = json.loads(line)
+            per[d["domain"]][d["group"]] += 1
+            total += 1
+    domains = sorted(per)
+    x = np.arange(len(domains))
+    fig, ax = plt.subplots(figsize=(9.0, 3.6))
+    bottom = np.zeros(len(domains))
+    for g in groups:
+        vals = np.array([per[d][g] for d in domains], dtype=float)
+        ax.bar(x, vals, bottom=bottom, color=colors[g], label=g, width=0.72)
+        bottom += vals
+    ax.set_xticks(x)
+    ax.set_xticklabels(domains, rotation=30, ha="right", fontsize=8)
+    ax.set_ylabel("scenario cells")
+    ax.set_title(f"PACT frozen set: {total:,} scenario cells by domain and cell group",
+                 loc="left", fontsize=11, pad=26)
+    ax.legend(ncol=len(groups), fontsize=7.5, loc="lower center",
+              bbox_to_anchor=(0.5, 1.02), frameon=False)
+    ax.grid(axis="y", color=FS.GRID, lw=0.8)
+    ax.set_axisbelow(True)
+    FS.strip_axes(ax)
+    fig.tight_layout()
+    os.makedirs(FIG_SRC, exist_ok=True)
+    out = os.path.join(FIG_SRC, "dataset_by_domain_group.png")
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    fig.savefig(out[:-4] + ".pdf", bbox_inches="tight")
+    plt.close(fig)
+    return out
+
+
 def copy_figures() -> List[str]:
     os.makedirs(FIGURES_DIR, exist_ok=True)
     copied = []
@@ -670,6 +719,8 @@ def main() -> None:
     with open(pr_path, "w", encoding="utf-8") as f:
         f.write(build_pressure_table())
     print(f"wrote {pr_path}")
+    fig_path = dataset_composition_figure()
+    print(f"wrote {fig_path}")
     copied = copy_figures()
     print(f"copied {len(copied)} figures -> {FIGURES_DIR}")
     print()

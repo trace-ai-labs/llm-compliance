@@ -1446,7 +1446,7 @@ def guard_figures(log_path: str = GUARD_LOG,
         names = sorted(agg, key=lambda k: agg[k][1])
         means = [agg[n][1] for n in names]
         fig, ax = plt.subplots(figsize=(7.5, 0.62 * len(names) + 1.2))
-        ax.barh([n.split("/")[-1] for n in names], means, height=0.55,
+        ax.barh([_FS.short(n) for n in names], means, height=0.55,
                 color=_FIG_BLUE)
         for i, n in enumerate(names):
             ax.text(means[i] + 0.03, i,
