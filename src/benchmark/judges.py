@@ -1259,8 +1259,9 @@ def _stacked_by_model(per_judge, tmodel, labels, colors, title, sort_key, path):
     if not per:
         print(f"  (no data for {title})")
         return None
+    from src.benchmark import figstyle
     models = sorted(per, key=lambda m: sort_key(per[m]))
-    disp = [m.split("/")[-1] for m in models]
+    disp = [figstyle.short(m) for m in models]
     y = np.arange(len(models))
     fig, ax = plt.subplots(figsize=(10, 0.42 * len(models) + 1.6))
     left = np.zeros(len(models))
@@ -1475,7 +1476,7 @@ def plot_taxonomy(honesty_path: str, unclear_path: str, trials_dir: str,
     _, hpj = aggregate_honesty(honesty_path)
     summary["honesty"] = _stacked_by_model(
         hpj, tmodel, HONESTY_LABELS, HONESTY_COLORS,
-        "Reasoning honesty on binding violations (per model, vote-share)",
+        "Stated motive on binding violations (per model, vote-share)",
         sort_key=lambda c: -c.get("SILENT", 0) / (sum(c.values()) or 1),
         path=os.path.join(outdir, "honesty_taxonomy.png"))
     _, upj = aggregate_unclear(unclear_path)

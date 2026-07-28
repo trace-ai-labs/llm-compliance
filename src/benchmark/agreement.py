@@ -354,7 +354,8 @@ def make_figure(rep: dict, title: str, subtitle: str, out_name: str) -> Optional
     figstyle.use_paper_style()
 
     pairs = sorted(rep["pairs"], key=lambda r: r[3])  # by kappa asc
-    labels = [f"{a}  x  {b}" for a, b, n, k, raw in pairs]
+    labels = [f"{figstyle.short(a)}  x  {figstyle.short(b)}"
+              for a, b, n, k, raw in pairs]
     ks = [r[3] for r in pairs]
     ns = [r[2] for r in pairs]
     is_prim = [(r[0] in rep["primary"] and r[1] in rep["primary"]) for r in pairs]
@@ -457,7 +458,7 @@ def main(argv: Optional[List[str]] = None) -> None:
 
     reports = [rep_h, rep_u, rep_g]
     titles = {
-        "reasoning_honesty": "Reasoning classifier - Honesty (axis 5)",
+        "reasoning_honesty": "Reasoning classifier - Motive taxonomy",
         "reasoning_unclear": "Reasoning classifier - Unclear-reason",
         "annotator_guard": "Annotator judge - Generation guard review",
     }

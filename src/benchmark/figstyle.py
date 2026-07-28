@@ -109,7 +109,13 @@ def is_closed(model: str) -> bool:
 def short(model: str) -> str:
     if model in DISPLAY_NAME:
         return DISPLAY_NAME[model]
-    return model.split("/")[-1] if "/" in model else model
+    # judge/guard logs tag models by the last path segment only; resolve those
+    # to the same display name so no figure prints a raw slug
+    tail = model.split("/")[-1]
+    for k, v in DISPLAY_NAME.items():
+        if k.split("/")[-1] == tail:
+            return v
+    return tail
 
 
 def model_color(model: str) -> str:

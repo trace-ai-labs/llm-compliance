@@ -517,7 +517,7 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
 
         medvals = [_norm(_med(a), a) for a in AXES]
         medvals += medvals[:1]
-        abbr = ["Def", "Prs", "Psh", "Str", "Hon", "Scp"]
+        abbr = ["Def", "Prs", "Psh", "Str", "Trn", "Scp"]
         ncols = 4
         nrows = -(-len(sm_models) // ncols)
         fig, axarr = plt.subplots(nrows, ncols, figsize=(3.0 * ncols, 3.1 * nrows),
