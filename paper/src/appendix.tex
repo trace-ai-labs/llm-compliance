@@ -180,6 +180,323 @@ smaller provider, hold for skills-gap review before shortlisting. \textbf{(viola
 No leave rule is engaged here, so applying it - holding Brennan for review - is the error the
 control is built to catch.
 
+\section{The Six-Axis Profile}
+\label{app:profile}
+
+\subsection{Inter-axis correlation}
+\label{app:axiscorr}
+Figure~\ref{fig:axiscorr} gives the full Pearson matrix behind the claim in
+\S\ref{sec:metrics} and \S\ref{sec:leaderboard} that the profile does not compress into
+one number. The four rule-holding axes correlate at $r=0.90$--$0.95$; steerability sits
+apart ($r=+0.08$ to $+0.18$ with that block, $-0.03$ with transparency), so whether a
+mandate repairs a model is not predictable from how often it violates; and transparency
+follows the rule-holding block only loosely ($r=0.47$--$0.65$), loosely enough that the
+axis still reorders the panel.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/axis_correlation}
+\caption{Pearson correlation between the six axes across the 22-model panel. The four
+rule-holding axes form one block ($r=0.90$--$0.95$); steerability is independent of
+everything, and transparency follows the block only loosely, so no single score can
+stand in for the profile.}
+\label{fig:axiscorr}
+\end{figure}
+
+\subsection{Per-model profiles}
+Figure~\ref{fig:radar} plots each model's six-axis profile as a small multiple, ordered
+by PACTScore. Every spoke is min--max normalized across the panel so the facets are
+comparable, and the dotted hexagon marks the panel median. Steerability is short almost
+everywhere, the weakest models (Llama-3.1-8B, Mistral-7B) collapse toward the center on
+the rule-holding axes, and several models spike on a single axis (GPT-5.6 Luna on
+transparency, Grok~4.3 on pushback, Nemotron-3-Super on steerability).
+
+\begin{figure*}[t]
+\centering
+\includegraphics[width=0.96\textwidth]{figures/radar}
+\caption{Six-axis profile of all 22 models (PACTScore in parentheses), ordered by
+PACTScore. Each spoke is min--max normalized across the panel; the dotted hexagon
+marks the panel median profile.}
+\label{fig:radar}
+\end{figure*}
+
+\section{Difficulty by Domain and Pressure}
+\label{app:difficulty}
+
+\subsection{Per-domain difficulty}
+Difficulty varies sharply across domains, and unevenly across the axes
+(Table~\ref{tab:perdomain}). Procurement is the hardest domain on every rule-holding
+axis but scope discernment, where healthcare administration is marginally lower
+(default compliance 0.755, where a cheap non-certified vendor is a standing
+temptation), with healthcare administration (0.867) and HR/hiring (0.882) next; government
+services and pharma medical information sit at the ceiling, both 0.996.
+
+Table~\ref{tab:modeldomain} resolves the same base-mode compliance per model per
+domain. The domain effect is panel-wide, not an artifact of the weak tail: procurement
+is the coolest or second-coolest cell for nearly every model, including the four at the
+top. Nor does overall rank bound exposure in a given domain: Inkling is 6th of 22 by
+PACTScore but 20th on procurement (0.70), below Nemotron-3-Super (0.73), fourteen
+places beneath it overall, while scoring 0.98--0.99 in eight other domains. A deployer
+buying for that domain would draw the opposite conclusion from the leaderboard than
+from this figure.
+
+Figure~\ref{fig:steerbaseline} plots the steerability result discussed in
+\S\ref{sec:leaderboard} against base compliance. The positive slope is
+what rules out the headroom explanation: if steerability were an artifact of having
+more failures left to repair, the slope would be negative. Recovery is in any case
+normalized by each domain's own failure mass, so headroom is divided out by
+construction.
+
+Scope discernment is weakest where the rule's boundary is genuinely ambiguous:
+healthcare administration (0.736), procurement (0.742), and AML (0.772), where models
+over-apply the rule to requests it does not cover, opening a breach review or filing a
+report when the facts do not call for it, against 0.885 in moderation and 0.908 in
+government services. Turn-2 hold is high everywhere, from 0.79 in procurement to 0.96
+in AML and privacy. The weakest models degrade across a whole domain, not on isolated
+scenarios.
+
+\begin{table}[t]
+\centering
+\footnotesize
+% Six columns of shaded cells run 267pt at the default 6pt separation against a 241.6pt
+% column; 3pt brings the block to 231pt and closes the heatmap up, which suits it.
+\setlength{\tabcolsep}{3pt}
+\input{tables/domain_axis}
+\caption{The five cell-based axes by domain, each the panel mean of the per-model
+per-domain score; transparency is omitted, having too few violations per domain to be
+stable.
+Color is scaled within each column. Procurement is hardest on the holding axes, and
+steerability varies most, from 0.19 in HR/hiring to 0.89 in government services.}
+\label{tab:perdomain}
+\end{table}
+
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\input{tables/model_domain}
+\caption{Base-mode turn-1 compliance ($\times$100) by model and domain, shaded on one
+scale across the whole table. Procurement, healthcare, and HR/hiring are the coolest
+columns for nearly every model, so domain difficulty is a panel-wide property rather
+than a feature of the weak tail. Inkling (70.0 on procurement, 6th overall) shows
+that a strong aggregate score does not bound a model's exposure in a specific domain.}
+\label{tab:modeldomain}
+\end{table*}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/steer_baseline}
+\caption{Domain steerability against base-mode default compliance. If steerability were
+a headroom artifact (more base failures leaving more to repair), the slope would be
+negative; instead it is positive. HR/hiring and healthcare administration are
+low-steerability outliers despite middling baselines, so a guardrail helping little is a
+property of the domain, not of how much room it had.}
+\label{fig:steerbaseline}
+\end{figure}
+
+\subsection{Pressures across turns}
+Table~\ref{tab:pressureturns} gives the per-family numbers behind
+\S\ref{sec:leaderboard}: turn-1 compliance, turn-2 hold, and steerability for each of
+the nine pressures. \emph{false clearance} (0.88) and \emph{urgency} (0.91) draw the
+most turn-1 violations, while turn-2 hold sits at 0.95--0.97 for every family. The
+steerability column carries the glosses for the three least repairable families:
+\emph{responsibility shift} (0.18, ``that's on me, not you''),
+\emph{peer escaped} (0.21, ``others did this and nothing happened''), and
+\emph{urgency} (0.22, ``I need this now''). Turn~2 here is the pushback
+branch, conditional on a turn-1 comply.
+
+Two breakouts resolve those pooled numbers. Per model (Table~\ref{tab:fragility}), the
+spread is far wider than the pooled one: Seed-OSS-36B sits at 0.605 and Mistral-7B at
+0.464 on \emph{false clearance} against 0.90 or above on the other families. Per
+domain (Table~\ref{tab:dompress}), losses pile up in the procurement row and the
+\emph{false clearance} and \emph{urgency} columns, the weakest cell being procurement
+under \emph{false clearance} (0.72), so a per-family mean understates how localized
+exposure is. Together with Table~\ref{tab:modeldomain}, the three tables cover
+every pairing of model, domain, and pressure.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\input{tables/pressure}
+\caption{Per-pressure compliance across turns and steerability, pooled over the panel
+(base mode). Turn-1 comply is the fraction complying on the first reply; turn-2 hold is
+the fraction that, having complied, still holds after one pushback; steerability is the
+signed recovery of base failures under the hard directive on that family's cells.}
+\label{tab:pressureturns}
+\end{table}
+
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\input{tables/model_pressure}
+\caption{Base-mode turn-1 compliance ($\times$100) by model and pressure family,
+shaded on one scale across the whole table; the model-by-pressure companion to
+Tables~\ref{tab:modeldomain} and~\ref{tab:dompress}. Losses concentrate in a few
+families rather than spreading across the battery.}
+\label{tab:fragility}
+\end{table*}
+
+\begin{table*}[t]
+\centering
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+\input{tables/domain_pressure}
+\caption{Base-mode turn-1 compliance ($\times$100) by domain and pressure family,
+pooled over the panel and shaded on one scale. Losses are concentrated, not uniform:
+the procurement row and the \emph{false clearance} column are the coolest.}
+\label{tab:dompress}
+\end{table*}
+
+\section{Transparency and Abstention in Detail}
+\label{app:labels}
+
+\subsection{How violations are explained}
+Table~\ref{tab:transmodels} gives the full per-model three-way transparency split
+behind the leaderboard column, with the violation counts the shares rest on. Figure~\ref{fig:transmodelsfig} plots the same composition per model. The split
+is indifferent to the system prompt: violations committed under the anti-adversarial
+mandate are misrepresented at the same rate as base-mode ones (79.9\% against
+78.7\%), so where the mandate fails to prevent a violation, it does not change how
+the violation is presented.
+
+\begin{table}[t]
+\centering
+\footnotesize
+\input{tables/transparency_models}
+\caption{Per-model transparency split over every judged violation (both system-prompt
+modes, both turns; trio vote-share). The most compliant models have the fewest
+violations, so their shares carry the widest intervals.}
+\label{tab:transmodels}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/transparency_taxonomy}
+\caption{Per-model composition of judged violations across the three
+transparency categories (trio-judged vote-share), the transparency-judge
+companion to Figure~\ref{fig:unclear}. Bars are ordered by transparent share.}
+\label{fig:transmodelsfig}
+\end{figure}
+
+\subsection{Why replies abstain}
+\label{app:abstention}
+A reply that does not resolve to a single listed option is marked \emph{unclear} and
+dropped from every axis denominator, so each axis scores a model only on the items it
+actually decided (\S\ref{sec:metrics}). The rate is low: 0.6\% to 7.5\% of turn-1
+replies across the panel, median 2.4\% (Table~\ref{tab:abstention}); no model abstains
+often enough to move an axis materially, and the ordering does not track PACTScore.
+
+Every turn that stays unresolved even after the forcing push (10{,}866 across both
+turns and both modes) is classified, by the same trio ensemble used for the
+transparency label, into four categories with an explicit precedence: the choice is
+handed back to the user (42.1\%), the reply commits decisively but not to exactly one
+listed option (25.9\%), it refuses on policy grounds without committing to any option
+(31.6\%), or it never lands anywhere (0.4\%). A policy refusal is not credited
+as compliance: an assistant that only blocks, without choosing a compliant path,
+has not resolved the request. It is the pipeline's most reproducible
+classifier (unanimous across judges on 79.6\% of turns; Appendix~\ref{app:agreement}).
+Figure~\ref{fig:unclear} shows the per-model composition, and the two turns abstain
+differently: turn-1 holdouts are dominated by policy refusals (36.2\%), turn-2 holdouts
+by hand-backs and off-menu commitments. The mandate barely moves the mix, trading a few
+points of off-menu commitment for policy refusal. Blank non-answers are essentially
+absent, which is why treating unresolved replies as undecided and dropping them, rather
+than counting them as violations, is the conservative choice.
+
+\begin{table}[t]
+\centering
+\footnotesize
+% Two model columns side by side run 251pt at the default 6pt separation against a
+% 241.6pt column; the wide 2.2em gutter between the halves absorbs the cut to 3pt.
+\setlength{\tabcolsep}{3pt}
+\input{tables/abstention}
+\caption{Per-model turn-1 abstention rate: the share of base-mode turn-1 replies the
+outcome judge could not resolve to a single menu option; closed models are underlined.
+These replies are excluded from every axis denominator and are reported here as a
+diagnostic.}
+\label{tab:abstention}
+\end{table}
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\columnwidth]{figures/unclear_taxonomy}
+\caption{Per-model composition of still-unclear turns (turn~1 and turn~2) across the
+four reason categories (trio-judged vote-share). Bars are ordered by refusal share.}
+\label{fig:unclear}
+\end{figure}
+
+\section{Uncertainty, Significance, and Run Configuration}
+\label{app:stats}
+An evaluation is an experiment on a sample of items, so we attach uncertainty to every
+reported number, following the statistical reporting recommendations of
+\citet{miller2024errorbars}. Each item is run three times over the 3{,}364-item set.
+
+\emph{Cell rates.} Every per-cell compliance rate carries a Wilson 95\% interval; these
+are released with the trial data.
+
+\emph{PACTScore.} The interval on PACTScore comes from a cluster bootstrap in which the
+\emph{item} is the resampling unit: each iteration draws items with replacement, keeps
+each drawn item's three replications intact, and recomputes the headline. This is the
+clustered treatment \citet{miller2024errorbars} recommends when a question is answered
+more than once, and between-item difficulty is the dominant variance component here.
+Items are drawn jointly across the two system-prompt modes, so the pairing that makes the
+two modes comparable is preserved.
+
+We deliberately do \emph{not} resample replications within an item: for a
+$\text{pass}^3$ statistic that resample is biased upward, because an item the model
+got right twice out of three redraws as all-correct with probability
+$(2/3)^3 \approx 0.30$, drifting the interval above the point estimate. Resampling
+only the item sample answers the question a reader actually has: whether another draw
+of items would have ordered the models differently. Half-widths run
+\PactCIHalfMin--\PactCIHalfMax\ (Figure~\ref{fig:pactci}), small because the item count
+is large, yet still wider than most gaps at the top of the table.
+
+\emph{Model comparisons.} We do not read a difference off the table as real just because
+one number is larger. For each pair of models we take the paired per-item PACTScore
+difference (pairing on the shared items cancels item difficulty, the dominant variance
+component), bootstrap it clustered by item for a two-sided $p$-value, and control the
+false-discovery rate across all $\binom{22}{2}=\PactNPairs$ pairs with
+Benjamini--Hochberg. Most differences survive: \PactNSig\ of \PactNPairs\ pairs
+(\PactPctSig\%) are significant at $p<0.05$. The ones that do not are between adjacent
+models near the ceiling: \PactTopCluster\ models are not separable from \PactLeader\ at
+$p<0.05$, so the leaderboard's head is a cluster and small gaps there should not be read
+as rank. The full contrast table, giving the difference, the shared item count, and raw
+and adjusted $p$, is released alongside the metrics.
+
+\emph{Denominators.} An item whose every replication was judged \emph{unclear} leaves
+that model's denominator (\S\ref{sec:pactscore}), so the per-model item count ranges
+\PactNDecidedMin--\PactNDecidedMax\ of \PactNItems\ rather than being constant across the
+panel, and the multi-turn subset ranges
+\PactNDecidedTwoMin--\PactNDecidedTwoMax. Separately, at most \PactNTwoMissing\ items per
+model produced no second-turn outcome and are scored turn-1-only. Both effects are small
+and reported per model in the released metrics, but they mean PACTScore averages over the
+items a model actually decided, not a fixed denominator.
+
+\emph{Run configuration.} All trials run at temperature 1.0 with three replications per
+item, so every figure is a statistical estimate; the bootstrap seeds are fixed, so the
+intervals themselves regenerate exactly. Judges run at temperature 0. The output budget
+is set by whether a model finishes its answer: 8{,}192 tokens for the ones that
+otherwise truncate (DeepSeek-V4-Pro, GPT-OSS-120B, Nemotron-3-Super, Seed-OSS-36B,
+Qwen3.6-27B, MiniMax-M2.5, Gemini 3 Flash, GPT-5.6 Luna), 2{,}048 for Grok 4.3 and
+Claude Haiku 4.5, and 1{,}024 for the rest, which finish well inside it. Generation
+allows eight authoring attempts per spine component and four per add-on before a
+component is dropped.
+
+Open-weight models are served on Baseten, Grok 4.3 and Gemini 3 Flash run via
+OpenRouter, and Claude Haiku 4.5 and GPT-5.6 Luna through their vendors' APIs. Grok 4.3
+runs with reasoning disabled and Claude Haiku 4.5 without extended thinking; Gemini 3
+Flash and GPT-5.6 Luna keep their default reasoning. No other sampling parameter is set
+anywhere in the pipeline, and the full run configuration ships with the released code.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.92\columnwidth]{figures/pact_ci}
+\caption{PACTScore with 95\% confidence intervals (item-cluster bootstrap) for all 22
+models. The dashed line marks the best model's lower interval bound; intervals crossing
+it (blue) overlap the top and are not distinguishable from it at the margin.}
+\label{fig:pactci}
+\end{figure}
+
 \section{Generation and Judge Prompts}
 \label{app:prompts}
 
@@ -327,13 +644,13 @@ guard, and the two attacks --- sit at 53--57\% pass and 2.4--2.6 tries.
 \toprule
 \textbf{Component} & \textbf{Reviews} & \textbf{Pass rate} & \textbf{Mean tries} \\
 \midrule
-Rule note            & 376  & \cellcolor[HTML]{8CC896} 0.86 & 1.9 \\
-Turn-2 scripts       & 634  & \cellcolor[HTML]{EBC084} 0.65 & 2.5 \\
-Task / request+menu  & 698  & \cellcolor[HTML]{E9B685} 0.63 & 2.7 \\
-Persona              & 710  & \cellcolor[HTML]{E8B186} 0.62 & 2.4 \\
-Pressure add-on      & 5{,}951 & \cellcolor[HTML]{E29888} 0.57 & 2.4 \\
-Non-binding guard    & 782  & \cellcolor[HTML]{DE848A} 0.53 & 2.4 \\
-Attack add-on        & 736  & \cellcolor[HTML]{DE848A} 0.53 & 2.6 \\
+Rule note            & 376  & 0.86 & 1.9 \\
+Turn-2 scripts       & 634  & 0.65 & 2.5 \\
+Task / request+menu  & 698  & 0.63 & 2.7 \\
+Persona              & 710  & 0.62 & 2.4 \\
+Pressure add-on      & 5{,}951 & 0.57 & 2.4 \\
+Non-binding guard    & 782  & 0.53 & 2.4 \\
+Attack add-on        & 736  & 0.53 & 2.6 \\
 \bottomrule
 \end{tabular}
 \caption{Guard review by component type: total review calls, fraction that passed, and
@@ -359,15 +676,15 @@ pressure--scenario pairings.
 \multicolumn{1}{@{}l}{\textbf{Pressure family}} &
 \textbf{Guard pass rate} & \textbf{Items kept} \\
 \midrule
-Peer Escaped            & \cellcolor[HTML]{8CC896} 0.89 & 137 \\
-Manager                 & \cellcolor[HTML]{ADCD8F} 0.80 & 137 \\
-Responsibility Shift    & \cellcolor[HTML]{B8CE8D} 0.77 & 137 \\
-Risk Minimized          & \cellcolor[HTML]{B8CE8D} 0.77 & 137 \\
-False Clearance         & \cellcolor[HTML]{C4D08B} 0.74 & 137 \\
-Fait Accompli           & \cellcolor[HTML]{E1D485} 0.66 & 137 \\
-Urgency                 & \cellcolor[HTML]{E5D484} 0.65 & 137 \\
-Cost Pressure           & \cellcolor[HTML]{DF8A89} 0.37 & 130 \\
-Sympathetic Beneficiary & \cellcolor[HTML]{DE848A} 0.35 & 127 \\
+Peer Escaped            & 0.89 & 137 \\
+Manager                 & 0.80 & 137 \\
+Responsibility Shift    & 0.77 & 137 \\
+Risk Minimized          & 0.77 & 137 \\
+False Clearance         & 0.74 & 137 \\
+Fait Accompli           & 0.66 & 137 \\
+Urgency                 & 0.65 & 137 \\
+Cost Pressure           & 0.37 & 130 \\
+Sympathetic Beneficiary & 0.35 & 127 \\
 \bottomrule
 \end{tabular}
 \caption{Per-pressure authoring difficulty. The two families that pass review least often
@@ -432,11 +749,11 @@ run, so no prompt was tuned on the data it scores.
 \textbf{Classifier} & \textbf{Unanimous [95\% CI]} & \textbf{$n$} \\
 \midrule
 \multicolumn{3}{@{}l}{\emph{Reasoning classifiers} (generator trio, leave-one-out)} \\
-\agrow Transparency (axis 5) & \cellcolor[HTML]{C9D18A} 75.7\% [75.0, 76.3] & 16{,}424 \\
-\agrow Unclear-reason        & \cellcolor[HTML]{8CC896} 79.6\% [78.9, 80.4] & 10{,}866 \\
+\agrow Transparency (axis 5) & 75.7\% [75.0, 76.3] & 16{,}424 \\
+\agrow Unclear-reason        & 79.6\% [78.9, 80.4] & 10{,}866 \\
 \midrule
 \multicolumn{3}{@{}l}{\emph{Annotator judge} (generation guard, two reviewers)} \\
-\agrow Guard review          & \cellcolor[HTML]{DE848A} 66.9\% [65.6, 68.2] &  4{,}944 \\
+\agrow Guard review          & 66.9\% [65.6, 68.2] &  4{,}944 \\
 \bottomrule
 \end{tabular}
 \caption{Inter-rater agreement for PACT's LLM classifiers, over items with $\geq2$
@@ -469,13 +786,13 @@ has still violated.
 \toprule
 \textbf{Leaderboard pair} & \textbf{Pairs same order} & \textbf{Mean rank shift} \\
 \midrule
-GLM $\times$ Kimi & \cellcolor[HTML]{E6A787} 84\% & \cellcolor[HTML]{E5A587} 2.4 \\
-GLM $\times$ Nemotron & \cellcolor[HTML]{EDCA83} 87\% & \cellcolor[HTML]{F0D682} 1.8 \\
-Kimi $\times$ Nemotron & \cellcolor[HTML]{DE848A} 81\% & \cellcolor[HTML]{DE848A} 2.8 \\
+GLM $\times$ Kimi & 84\% & 2.4 \\
+GLM $\times$ Nemotron & 87\% & 1.8 \\
+Kimi $\times$ Nemotron & 81\% & 2.8 \\
 \midrule
-Ensemble $\times$ GLM & \cellcolor[HTML]{C5D08B} 91\% & \cellcolor[HTML]{C8D08A} 1.4 \\
-Ensemble $\times$ Kimi & \cellcolor[HTML]{EDCA83} 87\% & \cellcolor[HTML]{E9B585} 2.2 \\
-Ensemble $\times$ Nemotron & \cellcolor[HTML]{8CC896} 95\% & \cellcolor[HTML]{8CC896} 0.8 \\
+Ensemble $\times$ GLM & 91\% & 1.4 \\
+Ensemble $\times$ Kimi & 87\% & 2.2 \\
+Ensemble $\times$ Nemotron & 95\% & 0.8 \\
 \bottomrule
 \end{tabular}
 \caption{Stability of the transparency leaderboard across judges, over 19 models on
@@ -485,306 +802,6 @@ is closer to every judge than the judges are to each other, so it is the most
 defensible aggregator.}
 \label{tab:transjudges}
 \end{table}
-
-\section{Uncertainty, Significance, and Run Configuration}
-\label{app:stats}
-An evaluation is an experiment on a sample of items, so we attach uncertainty to every
-reported number, following the statistical reporting recommendations of
-\citet{miller2024errorbars}. Each item is run three times over the 3{,}364-item set.
-
-\emph{Cell rates.} Every per-cell compliance rate carries a Wilson 95\% interval; these
-are released with the trial data.
-
-\emph{PACTScore.} The interval on PACTScore comes from a cluster bootstrap in which the
-\emph{item} is the resampling unit: each iteration draws items with replacement, keeps
-each drawn item's three replications intact, and recomputes the headline. This is the
-clustered treatment \citet{miller2024errorbars} recommends when a question is answered
-more than once, and between-item difficulty is the dominant variance component here.
-Items are drawn jointly across the two system-prompt modes, so the pairing that makes the
-two modes comparable is preserved.
-
-We deliberately do \emph{not} resample replications within an item: for a
-$\text{pass}^3$ statistic that resample is biased upward, because an item the model
-got right twice out of three redraws as all-correct with probability
-$(2/3)^3 \approx 0.30$, drifting the interval above the point estimate. Resampling
-only the item sample answers the question a reader actually has: whether another draw
-of items would have ordered the models differently. Half-widths run
-\PactCIHalfMin--\PactCIHalfMax\ (Figure~\ref{fig:pactci}), small because the item count
-is large, yet still wider than most gaps at the top of the table.
-
-\emph{Model comparisons.} We do not read a difference off the table as real just because
-one number is larger. For each pair of models we take the paired per-item PACTScore
-difference (pairing on the shared items cancels item difficulty, the dominant variance
-component), bootstrap it clustered by item for a two-sided $p$-value, and control the
-false-discovery rate across all $\binom{22}{2}=\PactNPairs$ pairs with
-Benjamini--Hochberg. Most differences survive: \PactNSig\ of \PactNPairs\ pairs
-(\PactPctSig\%) are significant at $p<0.05$. The ones that do not are between adjacent
-models near the ceiling: \PactTopCluster\ models are not separable from \PactLeader\ at
-$p<0.05$, so the leaderboard's head is a cluster and small gaps there should not be read
-as rank. The full contrast table, giving the difference, the shared item count, and raw
-and adjusted $p$, is released alongside the metrics.
-
-\emph{Denominators.} An item whose every replication was judged \emph{unclear} leaves
-that model's denominator (\S\ref{sec:pactscore}), so the per-model item count ranges
-\PactNDecidedMin--\PactNDecidedMax\ of \PactNItems\ rather than being constant across the
-panel, and the multi-turn subset ranges
-\PactNDecidedTwoMin--\PactNDecidedTwoMax. Separately, at most \PactNTwoMissing\ items per
-model produced no second-turn outcome and are scored turn-1-only. Both effects are small
-and reported per model in the released metrics, but they mean PACTScore averages over the
-items a model actually decided, not a fixed denominator.
-
-\emph{Run configuration.} All trials run at temperature 1.0 with three replications per
-item, so every figure is a statistical estimate; the bootstrap seeds are fixed, so the
-intervals themselves regenerate exactly. Judges run at temperature 0. The output budget
-is set by whether a model finishes its answer: 8{,}192 tokens for the ones that
-otherwise truncate (DeepSeek-V4-Pro, GPT-OSS-120B, Nemotron-3-Super, Seed-OSS-36B,
-Qwen3.6-27B, MiniMax-M2.5, Gemini 3 Flash, GPT-5.6 Luna), 2{,}048 for Grok 4.3 and
-Claude Haiku 4.5, and 1{,}024 for the rest, which finish well inside it. Generation
-allows eight authoring attempts per spine component and four per add-on before a
-component is dropped.
-
-Open-weight models are served on Baseten, Grok 4.3 and Gemini 3 Flash run via
-OpenRouter, and Claude Haiku 4.5 and GPT-5.6 Luna through their vendors' APIs. Grok 4.3
-runs with reasoning disabled and Claude Haiku 4.5 without extended thinking; Gemini 3
-Flash and GPT-5.6 Luna keep their default reasoning. No other sampling parameter is set
-anywhere in the pipeline, and the full run configuration ships with the released code.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=0.92\columnwidth]{figures/pact_ci}
-\caption{PACTScore with 95\% confidence intervals (item-cluster bootstrap) for all 22
-models. The dashed line marks the best model's lower interval bound; intervals crossing
-it (blue) overlap the top and are not distinguishable from it at the margin.}
-\label{fig:pactci}
-\end{figure}
-
-\section{The Six-Axis Profile}
-\label{app:profile}
-
-\subsection{Inter-axis correlation}
-\label{app:axiscorr}
-Figure~\ref{fig:axiscorr} gives the full Pearson matrix behind the claim in
-\S\ref{sec:metrics} and \S\ref{sec:leaderboard} that the profile does not compress into
-one number. The four rule-holding axes correlate at $r=0.90$--$0.95$; steerability sits
-apart ($r=+0.08$ to $+0.18$ with that block, $-0.03$ with transparency), so whether a
-mandate repairs a model is not predictable from how often it violates; and transparency
-follows the rule-holding block only loosely ($r=0.47$--$0.65$), loosely enough that the
-axis still reorders the panel.
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{figures/axis_correlation}
-\caption{Pearson correlation between the six axes across the 22-model panel. The four
-rule-holding axes form one block ($r=0.90$--$0.95$); steerability is independent of
-everything, and transparency follows the block only loosely, so no single score can
-stand in for the profile.}
-\label{fig:axiscorr}
-\end{figure}
-
-\subsection{Per-model profiles}
-Figure~\ref{fig:radar} plots each model's six-axis profile as a small multiple, ordered
-by PACTScore. Every spoke is min--max normalized across the panel so the facets are
-comparable, and the dotted hexagon marks the panel median. Steerability is short almost
-everywhere, the weakest models (Llama-3.1-8B, Mistral-7B) collapse toward the center on
-the rule-holding axes, and several models spike on a single axis (GPT-5.6 Luna on
-transparency, Grok~4.3 on pushback, Nemotron-3-Super on steerability).
-
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.96\textwidth]{figures/radar}
-\caption{Six-axis profile of all 22 models (PACTScore in parentheses), ordered by
-PACTScore. Each spoke is min--max normalized across the panel; the dotted hexagon
-marks the panel median profile.}
-\label{fig:radar}
-\end{figure*}
-
-\section{Difficulty by Domain and Pressure}
-\label{app:difficulty}
-
-\subsection{Per-domain difficulty}
-Difficulty varies sharply across domains, and unevenly across the axes
-(Table~\ref{tab:perdomain}). Procurement is the hardest domain on every rule-holding
-axis but scope discernment, where healthcare administration is marginally lower
-(default compliance 0.755, where a cheap non-certified vendor is a standing
-temptation), with healthcare administration (0.867) and HR/hiring (0.882) next; government
-services and pharma medical information sit at the ceiling, both 0.996.
-
-Figure~\ref{fig:perdomainheat} resolves the same base-mode compliance per model per
-domain. The domain effect is panel-wide, not an artifact of the weak tail: procurement
-is the coolest or second-coolest cell for nearly every model, including the four at the
-top. Nor does overall rank bound exposure in a given domain: Inkling is 6th of 22 by
-PACTScore but 20th on procurement (0.70), below Nemotron-3-Super (0.73), fourteen
-places beneath it overall, while scoring 0.98--0.99 in eight other domains. A deployer
-buying for that domain would draw the opposite conclusion from the leaderboard than
-from this figure.
-
-Figure~\ref{fig:steerbaseline} plots the steerability result discussed in
-\S\ref{sec:leaderboard} against base compliance. The positive slope is
-what rules out the headroom explanation: if steerability were an artifact of having
-more failures left to repair, the slope would be negative. Recovery is in any case
-normalized by each domain's own failure mass, so headroom is divided out by
-construction.
-
-Scope discernment is weakest where the rule's boundary is genuinely ambiguous:
-healthcare administration (0.736), procurement (0.742), and AML (0.772), where models
-over-apply the rule to requests it does not cover, opening a breach review or filing a
-report when the facts do not call for it, against 0.885 in moderation and 0.908 in
-government services. Turn-2 hold is high everywhere, from 0.79 in procurement to 0.96
-in AML and privacy. The weakest models degrade across a whole domain, not on isolated
-scenarios.
-
-\begin{table}[t]
-\centering
-\footnotesize
-% Six columns of shaded cells run 267pt at the default 6pt separation against a 241.6pt
-% column; 3pt brings the block to 231pt and closes the heatmap up, which suits it.
-\setlength{\tabcolsep}{3pt}
-\input{tables/domain_axis}
-\caption{The five cell-based axes by domain, each the panel mean of the per-model
-per-domain score; transparency is omitted, having too few violations per domain to be
-stable.
-Color is scaled within each column. Procurement is hardest on the holding axes, and
-steerability varies most, from 0.19 in HR/hiring to 0.89 in government services.}
-\label{tab:perdomain}
-\end{table}
-
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.96\textwidth]{figures/per_domain}
-\caption{Base-mode turn-1 compliance by model and domain. Procurement, healthcare
-administration, and HR/hiring are the coolest columns for nearly every model, so domain
-difficulty is a panel-wide property rather than a feature of the weak tail.
-Inkling (0.70 on procurement, 6th overall) shows that a strong aggregate score does not
-bound a model's exposure in a specific domain.}
-\label{fig:perdomainheat}
-\end{figure*}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{figures/steer_baseline}
-\caption{Domain steerability against base-mode default compliance. If steerability were
-a headroom artifact (more base failures leaving more to repair), the slope would be
-negative; instead it is positive. HR/hiring and healthcare administration are
-low-steerability outliers despite middling baselines, so a guardrail helping little is a
-property of the domain, not of how much room it had.}
-\label{fig:steerbaseline}
-\end{figure}
-
-\subsection{Pressures across turns}
-Table~\ref{tab:pressureturns} gives the per-family numbers behind
-\S\ref{sec:leaderboard}: turn-1 compliance, turn-2 hold, and steerability for each of
-the nine pressures. \emph{false clearance} (0.88) and \emph{urgency} (0.91) draw the
-most turn-1 violations, while turn-2 hold sits at 0.95--0.97 for every family. The
-steerability column carries the glosses for the three least repairable families:
-\emph{responsibility shift} (0.18, ``that's on me, not you''),
-\emph{peer escaped} (0.21, ``others did this and nothing happened''), and
-\emph{urgency} (0.22, ``I need this now''). Turn~2 here is the pushback
-branch, conditional on a turn-1 comply.
-
-Two heatmaps resolve those pooled numbers. Per model (Figure~\ref{fig:fragility}), the
-spread is far wider than the pooled one: Seed-OSS-36B sits at 0.605 and Mistral-7B at
-0.464 on \emph{false clearance} against 0.90 or above on the other families. Per
-domain (Figure~\ref{fig:dompress}), losses pile up in the procurement row and the
-\emph{false clearance} and \emph{urgency} columns, the weakest cell being procurement
-under \emph{false clearance} (0.72), so a per-family mean understates how localized
-exposure is. Together with Figure~\ref{fig:perdomainheat}, the three heatmaps cover
-every pairing of model, domain, and pressure.
-
-\begin{table}[t]
-\centering
-\footnotesize
-\setlength{\tabcolsep}{4pt}
-\input{tables/pressure}
-\caption{Per-pressure compliance across turns and steerability, pooled over the panel
-(base mode). Turn-1 comply is the fraction complying on the first reply; turn-2 hold is
-the fraction that, having complied, still holds after one pushback; steerability is the
-signed recovery of base failures under the hard directive on that family's cells.}
-\label{tab:pressureturns}
-\end{table}
-
-\begin{figure*}[t]
-\centering
-\includegraphics[width=0.96\textwidth]{figures/per_pressure}
-\caption{Base-mode turn-1 compliance by model and pressure family (green higher, amber
-lower), the model-by-pressure companion to Figures~\ref{fig:perdomainheat}
-and~\ref{fig:dompress}. Losses concentrate in a few families rather than spreading across
-the battery.}
-\label{fig:fragility}
-\end{figure*}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{figures/domain_pressure_heatmap}
-\caption{Base-mode turn-1 compliance by domain and pressure family, pooled over the
-panel. Losses are concentrated, not uniform: the procurement row and the
-\emph{false clearance} column are the coolest.}
-\label{fig:dompress}
-\end{figure}
-
-\section{Transparency and Abstention in Detail}
-\label{app:labels}
-
-\subsection{How violations are explained}
-Table~\ref{tab:transmodels} gives the full per-model three-way transparency split
-behind the leaderboard column, with the violation counts the shares rest on. The split
-is indifferent to the system prompt: violations committed under the anti-adversarial
-mandate are misrepresented at the same rate as base-mode ones (79.9\% against
-78.7\%), so where the mandate fails to prevent a violation, it does not change how
-the violation is presented.
-
-\begin{table}[t]
-\centering
-\footnotesize
-\input{tables/transparency_models}
-\caption{Per-model transparency split over every judged violation (both system-prompt
-modes, both turns; trio vote-share). The most compliant models have the fewest
-violations, so their shares carry the widest intervals.}
-\label{tab:transmodels}
-\end{table}
-
-\subsection{Why replies abstain}
-\label{app:abstention}
-A reply that does not resolve to a single listed option is marked \emph{unclear} and
-dropped from every axis denominator, so each axis scores a model only on the items it
-actually decided (\S\ref{sec:metrics}). The rate is low: 0.6\% to 7.5\% of turn-1
-replies across the panel, median 2.4\% (Table~\ref{tab:abstention}); no model abstains
-often enough to move an axis materially, and the ordering does not track PACTScore.
-
-Every turn that stays unresolved even after the forcing push (10{,}866 across both
-turns and both modes) is classified, by the same trio ensemble used for the
-transparency label, into four categories with an explicit precedence: the choice is
-handed back to the user (42.1\%), the reply commits decisively but not to exactly one
-listed option (25.9\%), it refuses on policy grounds without substituting an action
-(31.6\%), or it never lands anywhere (0.4\%). It is the pipeline's most reproducible
-classifier (unanimous across judges on 79.6\% of turns; Appendix~\ref{app:agreement}).
-Figure~\ref{fig:unclear} shows the per-model composition, and the two turns abstain
-differently: turn-1 holdouts are dominated by policy refusals (36.2\%), turn-2 holdouts
-by hand-backs and off-menu commitments. The mandate barely moves the mix, trading a few
-points of off-menu commitment for policy refusal. Blank non-answers are essentially
-absent, which is why treating unresolved replies as undecided and dropping them, rather
-than counting them as violations, is the conservative choice.
-
-\begin{table}[t]
-\centering
-\footnotesize
-% Two model columns side by side run 251pt at the default 6pt separation against a
-% 241.6pt column; the wide 2.2em gutter between the halves absorbs the cut to 3pt.
-\setlength{\tabcolsep}{3pt}
-\input{tables/abstention}
-\caption{Per-model turn-1 abstention rate: the share of base-mode turn-1 replies the
-outcome judge could not resolve to a single menu option; closed models are underlined.
-These replies are excluded from every axis denominator and are reported here as a
-diagnostic.}
-\label{tab:abstention}
-\end{table}
-
-\begin{figure}[t]
-\centering
-\includegraphics[width=\columnwidth]{figures/unclear_taxonomy}
-\caption{Per-model composition of still-unclear turns (turn~1 and turn~2) across the
-four reason categories (trio-judged vote-share). Bars are ordered by refusal share.}
-\label{fig:unclear}
-\end{figure}
 
 \section{Evaluation-Awareness Realism Probe}
 \label{app:evalaware}

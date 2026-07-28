@@ -1267,7 +1267,9 @@ def _stacked_by_model(per_judge, tmodel, labels, colors, title, sort_key, path):
             "SILENT": "Silent", "SCOPE_DENIED": "Scope denied",
             "RISK_MINIMIZED": "Risk minimized",
             "FALSE_AUTHORITY": "False authority",
-            "DEFIANT_HONEST": "Defiant honest"}
+            "DEFIANT_HONEST": "Defiant honest",
+            "TRANSPARENT": "Transparent", "CONCEALED": "Concealed",
+            "MISREPRESENTED": "Misrepresented"}
     models = sorted(per, key=lambda m: sort_key(per[m]))
     disp = [figstyle.short(m) for m in models]
     y = np.arange(len(models))
@@ -1494,6 +1496,12 @@ def plot_taxonomy(honesty_path: str, unclear_path: str, trials_dir: str,
         "Stated motive on binding violations (per model, vote-share)",
         sort_key=lambda c: -c.get("SILENT", 0) / (sum(c.values()) or 1),
         path=os.path.join(outdir, "honesty_taxonomy.png"))
+    _, tpj = aggregate_transparency()
+    summary["transparency"] = _stacked_by_model(
+        tpj, tmodel, TRANSPARENCY_LABELS, TRANSPARENCY_COLORS,
+        "Transparency on binding violations (per model, vote-share)",
+        sort_key=lambda c: -c.get("TRANSPARENT", 0) / (sum(c.values()) or 1),
+        path=os.path.join(outdir, "transparency_taxonomy.png"))
     _, upj = aggregate_unclear(unclear_path)
     # Count ONLY turns that are actually unclear in the FINAL outcome (after the push) -
     # T1 (plain utid) and T2 (utid tagged "||t2"). Drops turns the push un-uncleared and

@@ -689,35 +689,34 @@ def figure(summary_path: str = os.path.join(OUT_DIR, "summary.csv"),
         rows = list(_csv.DictReader(f))
     recs = []
     for r in rows:
-        head = 1.0 - float(r["C0"])          # native non-compliance
-        if head <= 0:
-            continue
         mid = MODEL_REGISTRY.get(r["model"], r["model"])
-        recs.append(dict(name=FS.short(mid), closed=FS.is_closed(mid),
-                         d1=float(r["dR1"]) / head, d2=float(r["dR2"]) / head))
-    recs.sort(key=lambda d: d["d2"])
+        recs.append(dict(name=FS.short(mid),
+                         c0=100 * float(r["C0"]), c1=100 * float(r["C1"]),
+                         c2=100 * float(r["C2"])))
+    # sorted by how far the announced frame moves the model
+    recs.sort(key=lambda d: d["c2"] - d["c0"])
 
     y = np.arange(len(recs))
-    fig, ax = plt.subplots(figsize=(5.6, 0.44 * len(recs) + 1.2))
+    fig, ax = plt.subplots(figsize=(5.4, 0.42 * len(recs) + 1.3))
     for i, d in enumerate(recs):
-        ax.barh(i + 0.19, d["d2"], height=0.36,
-                color=FS.RED if d["closed"] else FS.BLUE, zorder=3)
-        ax.barh(i - 0.19, d["d1"], height=0.36, color="#9ca3af", zorder=3)
-    ax.axvline(0, color=FS.INK, lw=1.1, zorder=4)
+        lo = min(d["c0"], d["c1"], d["c2"])
+        hi = max(d["c0"], d["c1"], d["c2"])
+        ax.plot([lo, hi], [i, i], color=FS.GRID, lw=2.2, zorder=1,
+                solid_capstyle="round")
+        ax.scatter([d["c1"]], [i], s=64, marker="s", color="#9ca3af", zorder=2)
+        ax.scatter([d["c2"]], [i], s=80, marker="D", color=FS.RED, zorder=3)
+        ax.scatter([d["c0"]], [i], s=90, color=FS.BLUE, zorder=4)
     ax.set_yticks(y)
     ax.set_yticklabels([d["name"] for d in recs], fontsize=12)
-    ax.xaxis.set_major_formatter(
-        plt.FuncFormatter(lambda v, _: f"{v * 100:.0f}%"))
-    ax.set_xlabel("share of native non-compliance removed", fontsize=13)
+    ax.set_xlabel("turn-1 compliance (%)", fontsize=13)
     ax.tick_params(axis="x", labelsize=12)
     ax.tick_params(axis="y", length=0)
-    handles = [plt.Rectangle((0, 0), 1, 1, color=FS.BLUE),
-               plt.Rectangle((0, 0), 1, 1, color=FS.RED),
-               plt.Rectangle((0, 0), 1, 1, color="#9ca3af")]
-    ax.legend(handles, ["announced (open-weights)", "announced (closed)",
-                        "realism-stripped"],
-              fontsize=11, loc="lower right", frameon=False,
-              handlelength=1.2, handletextpad=0.5)
+    handles = [plt.Line2D([], [], marker="o", ls="", color=FS.BLUE, ms=9),
+               plt.Line2D([], [], marker="s", ls="", color="#9ca3af", ms=8),
+               plt.Line2D([], [], marker="D", ls="", color=FS.RED, ms=8)]
+    ax.legend(handles, ["native item", "realism stripped", "announced as a test"],
+              fontsize=11, loc="lower left", frameon=False,
+              handletextpad=0.4)
     ax.grid(axis="x", color=FS.GRID, lw=0.8)
     ax.set_axisbelow(True)
     FS.strip_axes(ax)

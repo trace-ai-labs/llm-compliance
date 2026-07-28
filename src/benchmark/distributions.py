@@ -307,10 +307,33 @@ def main() -> None:
                [[p, pt[p]["t1_comply"], pt[p]["t2_hold"], pt[p]["steerability"]]
                 for p in pt])
 
-    # 3. domain x pressure heatmap
+    # 3. domain x pressure heatmap (+ grid CSVs for the paper's shaded tables:
+    # the appendix renders these as leaderboard-style tables, not figures)
     domains, fams, grid = domain_pressure_grid(cells, models)
     plot_domain_pressure(domains, fams, grid,
                          os.path.join(FIG_DIR, "domain_pressure_heatmap.png"))
+    _write_csv(os.path.join(OUT_DIR, "dist_domain_pressure.csv"),
+               ["domain"] + fams,
+               [[dom] + grid[i] for i, dom in enumerate(domains)])
+
+    def _cell_mean(m, want_domain=None, want_pressure=None):
+        vals = [c.rate for (mm, a, _), c in cells.items()
+                if mm == m and a == "base" and c.rate is not None
+                and (want_domain is None or c.domain == want_domain)
+                and (want_pressure is None or
+                     (c.group == "pressure" and c.pressure == want_pressure))]
+        return sum(vals) / len(vals) if vals else None
+
+    dom_keys = [d for d in sorted({c.domain for (_, a, _), c in cells.items()
+                                   if a == "base"})]
+    _write_csv(os.path.join(OUT_DIR, "dist_model_domain.csv"),
+               ["model"] + dom_keys,
+               [[m] + [_cell_mean(m, want_domain=d) for d in dom_keys]
+                for m in models])
+    _write_csv(os.path.join(OUT_DIR, "dist_model_pressure.csv"),
+               ["model"] + list(fams),
+               [[m] + [_cell_mean(m, want_pressure=f) for f in fams]
+                for m in models])
 
     # 4. steerability vs baseline scatter (refutes the headroom confound)
     plot_steer_baseline(da, os.path.join(FIG_DIR, "steer_baseline.png"))
