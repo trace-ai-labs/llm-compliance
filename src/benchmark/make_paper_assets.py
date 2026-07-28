@@ -33,12 +33,23 @@ DIST_PRESSURE_CSV = os.path.join("results", "benchmark", "dist_pressure.csv")
 
 
 def _tex_escape(s: str) -> str:
-    """Escape the LaTeX specials that appear in seed rule text ($ amounts, %, &, _, #)."""
+    """Escape the LaTeX specials that appear in seed rule text ($ amounts, %, &, _, #).
+
+    The trailing pair converts the U+2009 thin space that figstyle's display
+    labels carry for matplotlib into its LaTeX equivalent; pdflatex cannot set
+    the raw codepoint.
+    """
     for a, b in (("\\", r"\textbackslash "), ("&", r"\&"), ("%", r"\%"),
                  ("$", r"\$"), ("#", r"\#"), ("_", r"\_"), ("~", r"\textasciitilde "),
-                 ("^", r"\textasciicircum ")):
+                 ("^", r"\textasciicircum "), (" ", r"\,")):
         s = s.replace(a, b)
     return s
+
+
+def _tex_label(s: str) -> str:
+    """Thin-space fix only, for display labels that are already LaTeX (some model
+    names arrive wrapped in \\underline) and must not have their markup escaped."""
+    return s.replace(" ", r"\,")
 
 METRICS_CSV = os.path.join("results", "benchmark", "metrics_v2.csv")
 FIG_SRC = os.path.join("results", "benchmark", "figures")
@@ -488,7 +499,7 @@ def build_rules_table() -> str:
             prev_dom = dom
             title, rule, tempt = RULES_SHORT[s.id]
             out.append(
-                f"{shown} & {_tex_escape(title)} & {_tex_escape(rule)} & "
+                f"{_tex_label(shown)} & {_tex_escape(title)} & {_tex_escape(rule)} & "
                 f"{_tex_escape(tempt)} \\\\")
         out += [
             r"\bottomrule",
@@ -755,7 +766,8 @@ def _grid_table(path: str, row_label: str, row_disp, col_disp,
             v = float(r[c])
             t = (v - lo) / (hi - lo) if hi > lo else 1.0
             cells.append(f"\\cellcolor[HTML]{{{_rdylgn(t)}}} {100 * v:.1f}")
-        lines.append(f"{row_disp(r[row_label])} & " + " & ".join(cells) + r" \\")
+        lines.append(f"{_tex_label(row_disp(r[row_label]))} & "
+                     + " & ".join(cells) + r" \\")
     lines += [r"\bottomrule", r"\end{tabular}", ""]
     return "\n".join(lines)
 
