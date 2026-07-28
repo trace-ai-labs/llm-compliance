@@ -697,7 +697,8 @@ def figure(summary_path: str = os.path.join(OUT_DIR, "summary.csv"),
     recs.sort(key=lambda d: d["c2"] - d["c0"])
 
     y = np.arange(len(recs))
-    fig, ax = plt.subplots(figsize=(5.4, 0.42 * len(recs) + 1.3))
+    row_h = 0.42 if len(recs) <= 14 else 0.33   # full 21-model panel stays column-sized
+    fig, ax = plt.subplots(figsize=(5.4, row_h * len(recs) + 1.3))
     for i, d in enumerate(recs):
         lo = min(d["c0"], d["c1"], d["c2"])
         hi = max(d["c0"], d["c1"], d["c2"])
@@ -715,7 +716,7 @@ def figure(summary_path: str = os.path.join(OUT_DIR, "summary.csv"),
                plt.Line2D([], [], marker="s", ls="", color="#9ca3af", ms=8),
                plt.Line2D([], [], marker="D", ls="", color=FS.RED, ms=8)]
     ax.legend(handles, ["native item", "realism stripped", "announced as a test"],
-              fontsize=11, loc="lower left", frameon=False,
+              fontsize=11, loc="upper left", frameon=False,
               handletextpad=0.4)
     ax.grid(axis="x", color=FS.GRID, lw=0.8)
     ax.set_axisbelow(True)
