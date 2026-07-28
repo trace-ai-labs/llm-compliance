@@ -794,7 +794,8 @@ def unclear_final_trials(trials: List[dict]) -> List[Tuple[dict, str]]:
             continue
         if t.get("t1_outcome") == "unclear" and t.get("t1_response"):
             out.append((t, "t1"))
-        elif t.get("t2_outcome") == "unclear" and t.get("t2_response"):
+        elif (t.get("t2_outcome") == "unclear" and t.get("t2_response")
+              and t.get("t2_script") == "pushback"):
             out.append((t, "t2"))
     return out
 
@@ -1404,7 +1405,7 @@ def _unclear_dist(trials, per_judge, arm=None):
             continue
         if t.get("t1_outcome") == "unclear":
             final[f"{t['model']}||{t['trial_id']}"] = t.get("arm")
-        if t.get("t2_outcome") == "unclear":
+        if t.get("t2_outcome") == "unclear" and t.get("t2_script") == "pushback":
             final[f"{t['model']}||{t['trial_id']}||t2"] = t.get("arm")
     acc = {l: 0.0 for l in labs}; n = 0
     for utid, judged in per_judge.items():
@@ -1501,7 +1502,8 @@ def plot_taxonomy(honesty_path: str, unclear_path: str, trials_dir: str,
     final_unclear = {f"{t['model']}||{t['trial_id']}" for t in _trials
                      if t.get("t1_outcome") == "unclear"}
     final_unclear |= {f"{t['model']}||{t['trial_id']}||t2" for t in _trials
-                      if t.get("t2_outcome") == "unclear"}
+                      if t.get("t2_outcome") == "unclear"
+                      and t.get("t2_script") == "pushback"}
     tmodel = dict(tmodel)
     tmodel.update({f"{t['model']}||{t['trial_id']}||t2": t["model"] for t in _trials})
     upj = {u: v for u, v in upj.items() if u in final_unclear}

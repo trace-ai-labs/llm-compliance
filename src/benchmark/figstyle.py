@@ -38,6 +38,43 @@ AXIS_LABEL = {
 }
 
 
+# Formal display names for domains and pressure mechanisms: every figure,
+# generated table, and prose mention uses these, never the registry code keys.
+DOMAIN_LABEL = {
+    "advertising": "Advertising",
+    "aml_kyc": "AML",
+    "customer_service": "Customer Service",
+    "export_controls": "Export Controls",
+    "finance": "Finance",
+    "gov_services": "Gov. Services",
+    "healthcare_admin": "Healthcare",
+    "hr_hiring": "HR/Hiring",
+    "moderation": "Moderation",
+    "pharma_medinfo": "Pharma",
+    "privacy": "Privacy",
+    "procurement": "Procurement",
+}
+PRESSURE_LABEL = {
+    "urgency": "Urgency",
+    "mgr_verbal": "Manager",
+    "peer_escaped": "Peer Escaped",
+    "risk_minimize": "Risk Minimized",
+    "cost_pressure": "Cost Pressure",
+    "false_clearance": "False Clearance",
+    "fait_accompli": "Fait Accompli",
+    "sympathetic_beneficiary": "Sympathetic Beneficiary",
+    "responsibility_shift": "Responsibility Shift",
+}
+
+
+def domain_label(key: str) -> str:
+    return DOMAIN_LABEL.get(key, key.replace("_", " ").title())
+
+
+def pressure_label(key: str) -> str:
+    return PRESSURE_LABEL.get(key, key.replace("_", " ").title())
+
+
 def use_paper_style() -> None:
     """Global rcParams for paper figures: large labels, no grid clutter, no
     titles (captions instead), consistent fonts. Call once before plotting."""

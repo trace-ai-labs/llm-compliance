@@ -40,16 +40,8 @@ AXES = [
 
 
 def short_domain(key: str) -> str:
-    """A compact label for figure/table axes: the first segment of the title."""
-    title = DOMAIN_BY_KEY[key].title
-    head = title.split(" / ")[0].split(" & ")[0].strip()
-    return {"Government services": "Gov services",
-            "Customer service": "Customer svc",
-            "Advertising": "Advertising",
-            "Export controls": "Export ctrl",
-            "Pharma medical information": "Pharma",
-            "Healthcare admin": "Healthcare",
-            "Content moderation": "Moderation"}.get(head, head)
+    """Formal display label for a domain key (single source: figstyle)."""
+    return FS.domain_label(key)
 
 
 def _pooled_rate(cells: Sequence[M.Cell], attr: str) -> Optional[float]:
@@ -150,7 +142,7 @@ def plot_domain_pressure(domains, fams, grid, path: str) -> None:
     fig, ax = plt.subplots(figsize=(5.4, 4.6))
     ax.imshow(arr, cmap=FS.SCORE_CMAP, vmin=0.45, vmax=1.0, aspect="auto")
     ax.set_xticks(range(len(fams)))
-    ax.set_xticklabels([f.replace("_", " ") for f in fams], fontsize=12,
+    ax.set_xticklabels([FS.pressure_label(f) for f in fams], fontsize=12,
                        rotation=38, ha="right")
     ax.set_yticks(range(len(domains)))
     ax.set_yticklabels([short_domain(d) for d in domains], fontsize=12.5)
@@ -202,11 +194,11 @@ def plot_steer_baseline(da: Dict[str, Dict[str, Optional[float]]], path: str) ->
     ax.scatter(x, y, s=64, color=FS.BLUE, zorder=3)
     # per-domain label offsets tuned against collisions; the tight top-right
     # cluster gets displaced labels with thin leader lines
-    nudge = {"Gov services": (-9, -3), "AML": (-9, 2), "Data privacy": (8, -3),
-             "Finance ops": (-9, 2), "Export ctrl": (14, 14),
-             "Customer svc": (16, -4), "Pharma": (14, -18),
+    nudge = {"Gov. Services": (-9, -3), "AML": (-9, 2), "Privacy": (8, -3),
+             "Finance": (-9, 2), "Export Controls": (14, 14),
+             "Customer Service": (16, -4), "Pharma": (14, -18),
              "Moderation": (-14, -16)}
-    leader = {"Export ctrl", "Customer svc", "Pharma", "Moderation"}
+    leader = {"Export Controls", "Customer Service", "Pharma", "Moderation"}
     for d, xi, yi in zip(doms, x, y):
         s = short_domain(d)
         dx, dy = nudge.get(s, (7, 4))

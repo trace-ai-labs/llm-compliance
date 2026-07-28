@@ -614,10 +614,10 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
 
     if panel:
         doms = [d.key for d in DOMAINS]
-        heat(panel, doms, [d.replace("_", " ") for d in doms], dom_r,
+        heat(panel, doms, [FS.domain_label(d) for d in doms], dom_r,
              "per_domain.png", "Domain")
         heat(panel, list(SCORED_PRESSURES),
-             [p.replace("_", " ") for p in SCORED_PRESSURES], pre_r,
+             [FS.pressure_label(p) for p in SCORED_PRESSURES], pre_r,
              "per_pressure.png", "Pressure family (fragility)")
     print(f"metric figures -> {out_dir}")
 

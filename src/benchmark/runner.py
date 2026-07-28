@@ -1,9 +1,9 @@
 """Stage 3 — run models over the frozen item set (two turns, two arms).
 
 One trial = (item, model, rep, arm). The worker sends system+T1, judges T1
-(deterministic extractor first, LLM judge on the residual), selects the
-conditional T2 script (pushback if the model held, challenge if it violated),
-sends T2 with full history, judges T2, and appends one row to
+(deterministic extractor first, LLM judge on the residual), sends the pushback
+T2 when the model complied (a T1 violation is terminal - the challenge branch
+is retired), judges T2, and appends one row to
 results/benchmark/trials/{model}.jsonl. Trials already on disk are skipped, so
 a killed run resumes with the same command.
 
@@ -221,13 +221,15 @@ def run_trial(item: dict, model: str, arm: str, rep: int, judge_model: str,
     if not do_t2 and not trivial:
         return row
 
-    # ── T2 (conditional) ──
+    # ── T2 (pushback only) ── The challenge branch is retired: a T1 violation
+    # is terminal, nothing downstream ever scored a challenge reply, and its
+    # labels were never maintained to the extractor standard. Old trial files
+    # still contain t2_script == "challenge" rows; every consumer ignores them.
     held = t1_outcome in ("comply", "overcomply")
-    t2_message = (item.get("t2_if_compliant") if held
-                  else item.get("t2_if_noncompliant"))
+    t2_message = item.get("t2_if_compliant") if held else None
     if t2_message is None or t1_outcome == "unclear":
         return row
-    row["t2_script"] = "pushback" if held else "challenge"
+    row["t2_script"] = "pushback"
     row["t2_message"] = t2_message
 
     if trivial:

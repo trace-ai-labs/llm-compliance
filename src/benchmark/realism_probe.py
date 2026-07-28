@@ -73,8 +73,24 @@ ELIGIBLE_GROUPS = ("neutral", "pressure")
 DEFAULT_FRAC = 0.10
 DEFAULT_SEED = 0
 
-# Placeholder eval panel - EDIT / override with --models. "top few + some others."
-DEFAULT_EVAL_MODELS = ["haiku", "luna", "gemini", "glm", "kimi", "mistral"]
+# Stage-2 top-up: extend the probe sample to a clean 15% of the CORRECTED
+# eligible pool (the corpus the paper reports). Drawn with its own seed from
+# the eligible pool minus the stage-1 sample minus the corrections-excluded
+# ids, so no top-up trial is wasted on an excluded cell and no item is ever
+# sampled twice. Committed up front (not conditioned on interim results).
+TOPUP_SEED = 1
+TOTAL_FRAC = 0.15
+STAGES = ("s1", "topup", "pooled")
+
+# The full 22-model paper panel (every model with base-arm R0 on disk).
+# Routing: 8 Baseten shared, 6 Baseten dedicated, 8 external (Anthropic /
+# OpenAI / OpenRouter) - all resolved transparently by batch.call_one.
+DEFAULT_EVAL_MODELS = [
+    "kimi-code", "gpt-oss", "glm", "inkling", "deepseek", "kimi", "ultra",
+    "glm4.7", "haiku", "luna", "grok", "gemini",              # first-run 12
+    "glm5", "super", "minimax", "llama8b",                    # OpenRouter
+    "mistral", "llama", "qwen", "gemma", "seedoss", "qwen3.6",  # dedicated
+]
 
 # ── R2: the explicit-eval frame (prepended to the SYSTEM prompt) ─────────────
 # The obvious-eval pole / positive control. Short and matter-of-fact - it just
@@ -168,6 +184,40 @@ def sample_items(items: List[dict], frac: float = DEFAULT_FRAC,
     k = n if n is not None else max(1, round(frac * len(elig)))
     return sorted(rng.sample(elig, min(k, len(elig))),
                   key=lambda it: it["item_id"])
+
+
+def stage_sample(items: List[dict], stage: str = "s1",
+                 frac: float = DEFAULT_FRAC, seed: int = DEFAULT_SEED,
+                 n: Optional[int] = None) -> List[dict]:
+    """The probe sample for a stage. `s1` is the original seed-0 ~10% draw,
+    byte-identical to the first run. `topup` is the committed extension to
+    TOTAL_FRAC of the corrected eligible pool: drawn with TOPUP_SEED from the
+    eligible pool minus s1 minus the corrections-excluded ids (so the corrected
+    total lands exactly on TOTAL_FRAC and nothing is wasted). `pooled` = both.
+    Dedup is at item_id level only: the same scenario under a different
+    generator (or pressure) is a different item and stays eligible."""
+    if stage == "s1":
+        return sample_items(items, frac, seed, n)
+    from src.benchmark import corrections as CORR
+    elig = sorted((it for it in items if it["group"] in ELIGIBLE_GROUPS),
+                  key=lambda it: it["item_id"])
+    excl = set(CORR.excluded_ids(elig))
+    s1 = sample_items(items, frac, seed)
+    s1_ids = {it["item_id"] for it in s1}
+    corrected_pool = len(elig) - len(excl)
+    target_total = round(TOTAL_FRAC * corrected_pool)
+    s1_corrected = len(s1_ids - excl)
+    k = max(0, target_total - s1_corrected)
+    pool = [it for it in elig
+            if it["item_id"] not in s1_ids and it["item_id"] not in excl]
+    rng = random.Random(TOPUP_SEED)
+    topup = sorted(rng.sample(pool, min(k, len(pool))),
+                   key=lambda it: it["item_id"])
+    if stage == "topup":
+        return topup
+    if stage == "pooled":
+        return sorted(s1 + topup, key=lambda it: it["item_id"])
+    raise ValueError(f"unknown stage {stage!r} (expected one of {STAGES})")
 
 
 # ── R1 rewrite: parse + build ─────────────────────────────────────────────────
@@ -470,11 +520,12 @@ def _fmt(v, lo, hi, signed=False):
 
 
 def report(models: List[str], items_path: str, frac: float, seed: int,
-           n: Optional[int]) -> None:
+           n: Optional[int], stage: str = "s1") -> None:
     items = load_items(items_path)
     by_id = {it["item_id"]: it for it in items}
-    sample = sample_items(items, frac, seed, n)
+    sample = stage_sample(items, stage, frac, seed, n)
     sample_ids = {it["item_id"] for it in sample}
+    print(f"stage={stage}: {len(sample)} sampled items")
 
     # The sample was drawn from the pre-correction item file (that is what the
     # R1/R2 runs were made against), so apply the corpus corrections here:
@@ -703,17 +754,19 @@ def main() -> None:
     p_prev.add_argument("-n", type=int, default=5)
 
     p_rw = sub.add_parser("rewrite", parents=[common],
-                          help="phase A: author R1 for the whole ~10% sample")
+                          help="phase A: author R1 for the stage's sample")
     p_rw.add_argument("--frac", type=float, default=DEFAULT_FRAC)
     p_rw.add_argument("-n", type=int, default=None,
                       help="override frac with an explicit sample size")
     p_rw.add_argument("-o", "--output", default=R1_REWRITES)
+    p_rw.add_argument("--stage", choices=STAGES, default="s1")
 
     p_run = sub.add_parser("run", parents=[common],
                            help="phase B: run R1 + R2 (T1 only) for each model")
     p_run.add_argument("--models", nargs="+", default=DEFAULT_EVAL_MODELS)
     p_run.add_argument("--frac", type=float, default=DEFAULT_FRAC)
     p_run.add_argument("-n", type=int, default=None)
+    p_run.add_argument("--stage", choices=STAGES, default="s1")
     p_run.add_argument("--rungs", nargs="+", default=["r1", "r2"],
                        choices=["r1", "r2"])
     p_run.add_argument("--judge-model", default=None)
@@ -727,6 +780,7 @@ def main() -> None:
     p_rep.add_argument("--models", nargs="+", default=DEFAULT_EVAL_MODELS)
     p_rep.add_argument("--frac", type=float, default=DEFAULT_FRAC)
     p_rep.add_argument("-n", type=int, default=None)
+    p_rep.add_argument("--stage", choices=STAGES, default="s1")
 
     p_fig = sub.add_parser("figure",
                            help="render the paper's eval-awareness figure "
@@ -739,17 +793,19 @@ def main() -> None:
         preview(args.n, args.items, args.seed, args.workers)
     elif args.cmd == "rewrite":
         items = load_items(args.items)
-        sample = sample_items(items, args.frac, args.seed, args.n)
-        print(f"authoring R1 for {len(sample)} sampled items")
+        sample = stage_sample(items, args.stage, args.frac, args.seed, args.n)
+        print(f"authoring R1 for {len(sample)} sampled items (stage={args.stage})")
         do_rewrite(sample, args.output, args.workers)
         ok = load_rewrites({it["item_id"]: it for it in items}, args.output)
-        print(f"done -> {args.output} ({len(ok)}/{len(sample)} parsed)")
+        sample_ids = {it["item_id"] for it in sample}
+        print(f"done -> {args.output} "
+              f"({len(sample_ids & set(ok))}/{len(sample)} of this stage parsed)")
     elif args.cmd == "run":
         from src.benchmark.batch import DEFAULT_EXTRACT_MODEL
         judge = resolve_model(args.judge_model or DEFAULT_EXTRACT_MODEL)
         items = load_items(args.items)
         by_id = {it["item_id"]: it for it in items}
-        sample = sample_items(items, args.frac, args.seed, args.n)
+        sample = stage_sample(items, args.stage, args.frac, args.seed, args.n)
         r1_ok = load_rewrites(by_id)
         if not r1_ok and "r1" in args.rungs:
             raise SystemExit("no R1 rewrites on disk - run `rewrite` first")
@@ -764,7 +820,7 @@ def main() -> None:
                 run_rung(model, r2_items, "r2", judge, args.workers,
                          args.max_tokens, force=force)
     elif args.cmd == "report":
-        report(args.models, args.items, args.frac, args.seed, args.n)
+        report(args.models, args.items, args.frac, args.seed, args.n, args.stage)
     elif args.cmd == "figure":
         figure(args.summary)
 

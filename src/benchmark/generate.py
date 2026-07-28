@@ -1289,58 +1289,57 @@ def guard_figures(log_path: str = GUARD_LOG,
         fig.savefig(os.path.join(out_dir, "guard_attempts.png"), dpi=150)
         plt.close(fig)
 
-    # acceptance probability per attempt round, by component group: the paper
-    # figure behind "feedback beats blind resampling". h(r) = P(accepted at
-    # attempt r | the component reached attempt r).
-    _HGROUP = {"persona": "Spine", "task": "Spine", "t2": "Spine",
-               "rules": "Rule note", "guard_nonbinding": "Guard add-on",
-               "attacks": "Attack add-on"}
-    def _hgroup(comp: str) -> str:
-        return "Pressure add-on" if comp.startswith("pressure.") \
-            else _HGROUP.get(comp, comp)
-    inst: Dict[tuple, Dict[int, bool]] = {}
+    # cumulative acceptance by attempt, per component group: the share of
+    # authored components accepted within k attempts (never-accepted components
+    # stay in the denominator, so the curve's ceiling is the survival rate).
+    _CGROUP = {"persona": "Persona", "task": "Task & menu",
+               "t2": "Turn-2 script", "rules": "Rule note",
+               "guard_nonbinding": "Non-binding guard", "attacks": "Attack"}
+    def _cgroup(comp: str) -> str:
+        return "Pressure" if comp.startswith("pressure.") \
+            else _CGROUP.get(comp, comp)
+    first_acc: Dict[tuple, Optional[int]] = {}
     for r in rows:
         key = (r["scenario_id"], r["generator_model"], r["component"],
                r.get("pressure_key"))
         a = int(r["attempt"])
-        d = inst.setdefault(key, {})
-        d[a] = d.get(a, False) or bool(r["accepted"])
-    haz: Dict[str, Dict[int, List[int]]] = {}
-    for key, attempts in inst.items():
-        g = _hgroup(key[2])
-        for a, acc in attempts.items():
-            c = haz.setdefault(g, {}).setdefault(a, [0, 0])
-            c[1] += 1
-            c[0] += acc
-    order = ["Rule note", "Spine", "Pressure add-on", "Attack add-on",
-             "Guard add-on"]
-    colors = dict(zip(order, [_FS.GREEN, _FS.BLUE, _FS.PURPLE, _FS.ORANGE,
-                              _FS.GOLD]))
-    fig, ax = plt.subplots(figsize=(4.9, 3.5))
-    xmax = 5
+        if key not in first_acc:
+            first_acc[key] = None
+        if r["accepted"] and (first_acc[key] is None or a < first_acc[key]):
+            first_acc[key] = a
+    groups: Dict[str, List[Optional[int]]] = {}
+    for key, a in first_acc.items():
+        groups.setdefault(_cgroup(key[2]), []).append(a)
+    order = ["Rule note", "Persona", "Task & menu", "Turn-2 script",
+             "Pressure", "Attack", "Non-binding guard"]
+    order = [g for g in order if g in groups]
+    colors = dict(zip(order, [_FS.GREEN, _FS.BLUE, _FS.TEAL, _FS.PINK,
+                              _FS.PURPLE, _FS.ORANGE, _FS.GOLD]))
+    fig, ax = plt.subplots(figsize=(5.0, 3.6))
+    xmax = 6
     ends = []
     for g in order:
-        hs = haz.get(g, {})
-        xs = [a + 1 for a in sorted(hs) if a < xmax]
-        ys = [100 * hs[a][0] / hs[a][1] for a in sorted(hs) if a < xmax]
-        ax.plot(xs, ys, marker="o", ms=6, lw=2.4, color=colors[g],
+        vals = groups[g]
+        n = len(vals)
+        xs = list(range(1, xmax + 1))
+        ys = [100 * sum(1 for a in vals if a is not None and a + 1 <= k) / n
+              for k in xs]
+        ax.plot(xs, ys, marker="o", ms=5, lw=2.2, color=colors[g],
                 solid_capstyle="round")
-        ends.append((ys[-1], g))
-    # direct labels at the right edge, nudged apart where lines end close
+        ends.append((ys[-1], g, colors[g]))
     ends.sort()
-    ypos, gap = [], 7.5
-    for y, g in ends:
+    ypos, gap = [], 6.4
+    for y, lab, col in ends:
         if ypos and y - ypos[-1][0] < gap:
             y = ypos[-1][0] + gap
-        ypos.append((y, g))
-    for y, g in ypos:
-        ax.text(xmax + 0.12, y, g, va="center", fontsize=11.5,
-                color=colors[g])
-    ax.set_xlim(0.8, xmax + 1.9)
-    ax.set_ylim(0, 92)
+        ypos.append((y, lab, col))
+    for y, lab, col in ypos:
+        ax.text(xmax + 0.15, y, lab, va="center", fontsize=11, color=col)
+    ax.set_xlim(0.8, xmax + 2.6)
+    ax.set_ylim(0, 104)
     ax.set_xticks(range(1, xmax + 1))
-    ax.set_xlabel("authoring attempt", fontsize=13)
-    ax.set_ylabel("acceptance rate (%)", fontsize=13)
+    ax.set_xlabel("authoring attempts", fontsize=13)
+    ax.set_ylabel("components accepted (%)", fontsize=13)
     ax.tick_params(labelsize=12)
     ax.grid(axis="y", color="#e5e7eb", linewidth=0.8)
     ax.set_axisbelow(True)

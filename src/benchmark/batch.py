@@ -76,6 +76,8 @@ MODEL_REGISTRY: Dict[str, str] = {
     "qwen36":   "Qwen3.6 27B",
     "qwen3.6":  "Qwen3.6 27B",
     # External-provider models (see EXTERNAL below): Anthropic / OpenAI / OpenRouter.
+    "minimax":      "MiniMaxAI/MiniMax-M2.5",
+    "llama8b":      "llama-3.1-8b-instruct",
     "haiku":        "claude-haiku-4-5",
     "claude-haiku": "claude-haiku-4-5",
     "luna":         "gpt-5.6-luna",
@@ -177,6 +179,22 @@ EXTERNAL: Dict[str, "ProviderSpec"] = {
         base_url="https://openrouter.ai/api/v1",
         key_envs=("OPENROUTER_API_KEY",),
         served_model="nvidia/nemotron-3-super-120b-a12b",
+        default_headers={"HTTP-Referer": "https://github.com/pact-benchmark",
+                         "X-Title": "PACT benchmark"}),
+    # MiniMax-M2.5 and llama-3.1-8b: also retired from the Baseten shared API
+    # (both originally ran there as raw slugs). Same checkpoints on OpenRouter.
+    # MiniMax is a reasoning model (default thinking, ran at 8192 originally);
+    # llama-3.1-8b is plain instruct (ran at 1024).
+    "MiniMaxAI/MiniMax-M2.5": ProviderSpec(
+        base_url="https://openrouter.ai/api/v1",
+        key_envs=("OPENROUTER_API_KEY",),
+        served_model="minimax/minimax-m2.5",
+        default_headers={"HTTP-Referer": "https://github.com/pact-benchmark",
+                         "X-Title": "PACT benchmark"}),
+    "llama-3.1-8b-instruct": ProviderSpec(
+        base_url="https://openrouter.ai/api/v1",
+        key_envs=("OPENROUTER_API_KEY",),
+        served_model="meta-llama/llama-3.1-8b-instruct",
         default_headers={"HTTP-Referer": "https://github.com/pact-benchmark",
                          "X-Title": "PACT benchmark"}),
 }
