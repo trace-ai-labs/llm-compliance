@@ -647,23 +647,26 @@ def figure(summary_path: str = os.path.join(OUT_DIR, "summary.csv"),
     recs.sort(key=lambda d: d["d2"])
 
     y = np.arange(len(recs))
-    fig, ax = plt.subplots(figsize=(7.0, 0.52 * len(recs) + 1.4))
+    fig, ax = plt.subplots(figsize=(5.6, 0.44 * len(recs) + 1.2))
     for i, d in enumerate(recs):
         ax.barh(i + 0.19, d["d2"], height=0.36,
                 color=FS.RED if d["closed"] else FS.BLUE, zorder=3)
         ax.barh(i - 0.19, d["d1"], height=0.36, color="#9ca3af", zorder=3)
-    ax.axvline(0, color=FS.INK, lw=1.0, zorder=4)
+    ax.axvline(0, color=FS.INK, lw=1.1, zorder=4)
     ax.set_yticks(y)
-    ax.set_yticklabels([d["name"] for d in recs], fontsize=9)
+    ax.set_yticklabels([d["name"] for d in recs], fontsize=12)
     ax.xaxis.set_major_formatter(
         plt.FuncFormatter(lambda v, _: f"{v * 100:.0f}%"))
-    ax.set_xlabel("Share of native non-compliance removed")
+    ax.set_xlabel("share of native non-compliance removed", fontsize=13)
+    ax.tick_params(axis="x", labelsize=12)
+    ax.tick_params(axis="y", length=0)
     handles = [plt.Rectangle((0, 0), 1, 1, color=FS.BLUE),
                plt.Rectangle((0, 0), 1, 1, color=FS.RED),
                plt.Rectangle((0, 0), 1, 1, color="#9ca3af")]
-    ax.legend(handles, ["announced  (open-weights)", "announced  (closed)",
+    ax.legend(handles, ["announced (open-weights)", "announced (closed)",
                         "realism-stripped"],
-              fontsize=8, loc="lower right", frameon=False)
+              fontsize=11, loc="lower right", frameon=False,
+              handlelength=1.2, handletextpad=0.5)
     ax.grid(axis="x", color=FS.GRID, lw=0.8)
     ax.set_axisbelow(True)
     FS.strip_axes(ax)

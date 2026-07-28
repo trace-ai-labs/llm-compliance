@@ -137,24 +137,33 @@ def _write_csv(path: str, header: List[str], rows: List[List]) -> None:
 
 
 def plot_domain_pressure(domains, fams, grid, path: str) -> None:
+    """Annotated heatmap, cell values x100 (no colorbar: the numbers carry the
+    value, the shade is a redundant cue). No in-figure title; the caption has it."""
     import matplotlib.pyplot as plt
     import numpy as np
     FS.use_paper_style()
     arr = np.array([[v if v is not None else np.nan for v in row] for row in grid])
-    fig, ax = plt.subplots(figsize=(8.2, 6.4))
-    im = ax.imshow(arr, cmap=FS.SCORE_CMAP, vmin=0.5, vmax=1.0, aspect="auto")
+    # rows ordered easiest domain at top -> hardest at bottom
+    order = np.argsort(-np.nanmean(arr, axis=1))
+    arr = arr[order]
+    domains = [domains[i] for i in order]
+    fig, ax = plt.subplots(figsize=(5.4, 4.6))
+    ax.imshow(arr, cmap=FS.SCORE_CMAP, vmin=0.45, vmax=1.0, aspect="auto")
     ax.set_xticks(range(len(fams)))
-    ax.set_xticklabels([f.replace("_", " ") for f in fams], rotation=45, ha="right")
+    ax.set_xticklabels([f.replace("_", " ") for f in fams], fontsize=12,
+                       rotation=38, ha="right")
     ax.set_yticks(range(len(domains)))
-    ax.set_yticklabels([short_domain(d) for d in domains])
+    ax.set_yticklabels([short_domain(d) for d in domains], fontsize=12.5)
     for i in range(len(domains)):
         for j in range(len(fams)):
             v = arr[i, j]
             if v == v:
-                ax.text(j, i, f"{v:.2f}", ha="center", va="center",
-                        fontsize=7, color=FS.INK if v > 0.7 else "white")
-    ax.set_title("Turn-1 compliance by domain and pressure (base mode, panel-pooled)")
-    fig.colorbar(im, ax=ax, fraction=0.025, pad=0.02, label="compliance")
+                ax.text(j, i, f"{100 * v:.0f}", ha="center", va="center",
+                        fontsize=12.5, color="white" if v >= 0.955 else FS.INK)
+    ax.tick_params(length=0)
+    for s in ax.spines.values():
+        s.set_visible(False)
+    fig.tight_layout()
     fig.savefig(path, bbox_inches="tight")
     fig.savefig(path[:-4] + ".pdf", bbox_inches="tight")
     plt.close(fig)
@@ -180,15 +189,42 @@ def plot_steer_baseline(da: Dict[str, Dict[str, Optional[float]]], path: str) ->
     x = [da[d]["default_compliance"] for d in doms]
     y = [da[d]["steerability"] for d in doms]
     r = _pearson(x, y)
-    fig, ax = plt.subplots(figsize=(6.4, 5.0))
-    ax.scatter(x, y, s=42, color=FS.BLUE, zorder=3)
+    fig, ax = plt.subplots(figsize=(5.0, 3.9))
+    # light least-squares trend behind the points, so the positive slope the
+    # caption argues from is visible rather than implied
+    n = len(x)
+    mx, my = sum(x) / n, sum(y) / n
+    b = sum((a - mx) * (c - my) for a, c in zip(x, y)) / \
+        sum((a - mx) ** 2 for a in x)
+    xs = [min(x) - 0.01, max(x) + 0.01]
+    ax.plot(xs, [my + b * (v - mx) for v in xs], color=FS.MUTED, lw=1.6,
+            ls="--", zorder=2, alpha=0.8)
+    ax.scatter(x, y, s=64, color=FS.BLUE, zorder=3)
+    # per-domain label offsets tuned against collisions; the tight top-right
+    # cluster gets displaced labels with thin leader lines
+    nudge = {"Gov services": (-9, -3), "AML": (-9, 2), "Data privacy": (8, -3),
+             "Finance ops": (-9, 2), "Export ctrl": (14, 14),
+             "Customer svc": (16, -4), "Pharma": (14, -18),
+             "Moderation": (-14, -16)}
+    leader = {"Export ctrl", "Customer svc", "Pharma", "Moderation"}
     for d, xi, yi in zip(doms, x, y):
-        ax.annotate(short_domain(d), (xi, yi), fontsize=8,
-                    xytext=(4, 3), textcoords="offset points")
-    ax.set_xlabel("Base-mode default compliance (panel mean)")
-    ax.set_ylabel("Steerability (recovery)")
-    ax.set_title(f"Steerability does not rise with headroom (r={r:+.2f})")
-    ax.grid(True, alpha=0.3)
+        s = short_domain(d)
+        dx, dy = nudge.get(s, (7, 4))
+        kw = dict(fontsize=11, xytext=(dx, dy), textcoords="offset points",
+                  ha="right" if dx < 0 else "left", va="center", color=FS.INK)
+        if s in leader:
+            kw["arrowprops"] = dict(arrowstyle="-", lw=0.8, color="#9ca3af",
+                                    shrinkA=2, shrinkB=3)
+        ax.annotate(s, (xi, yi), **kw)
+    ax.set_xlabel("base-mode default compliance (panel mean)", fontsize=13)
+    ax.set_ylabel("steerability (recovery)", fontsize=13)
+    ax.tick_params(labelsize=12)
+    ax.grid(True, color=FS.GRID, lw=0.8)
+    ax.set_axisbelow(True)
+    FS.strip_axes(ax)
+    ax.text(0.02, 0.95, f"$r = {r:+.2f}$", transform=ax.transAxes,
+            fontsize=12.5, va="top", color=FS.INK)
+    fig.tight_layout()
     fig.savefig(path, bbox_inches="tight")
     fig.savefig(path[:-4] + ".pdf", bbox_inches="tight")
     plt.close(fig)
@@ -229,19 +265,25 @@ def plot_pact_ci(metrics_path: str, path: str) -> None:
     rows.sort(key=lambda r: float(r["pact_score"]))
     best_lo = float(max(rows, key=lambda r: float(r["pact_score"]))["pact_score_lo"])
     ys = range(len(rows))
-    fig, ax = plt.subplots(figsize=(6.6, 7.2))
+    fig, ax = plt.subplots(figsize=(5.2, 6.6))
     for y, r in zip(ys, rows):
         v = float(r["pact_score"])
         lo, hi = float(r["pact_score_lo"]), float(r["pact_score_hi"])
         col = FS.BLUE if hi >= best_lo else FS.MUTED
-        ax.plot([lo, hi], [y, y], color=col, lw=1.6, zorder=2)
-        ax.scatter([v], [y], color=col, s=30, zorder=3)
+        ax.plot([lo, hi], [y, y], color=col, lw=2.4, zorder=2,
+                solid_capstyle="round")
+        ax.scatter([v], [y], color=col, s=46, zorder=3)
     ax.set_yticks(list(ys))
-    ax.set_yticklabels([FS.short(r["model"]) for r in rows], fontsize=8)
-    ax.set_xlabel("PACTScore")
-    ax.set_title("PACTScore with 95% confidence intervals (item-cluster bootstrap)")
-    ax.axvline(best_lo, color=FS.RED, ls="--", lw=0.9, alpha=0.7, zorder=1)
-    ax.grid(True, axis="x", alpha=0.3)
+    ax.set_yticklabels([FS.short(r["model"]) for r in rows], fontsize=12)
+    ax.set_xlabel("PACTScore", fontsize=13.5)
+    ax.tick_params(axis="x", labelsize=12)
+    ax.axvline(best_lo, color=FS.RED, ls="--", lw=1.2, alpha=0.7, zorder=1)
+    ax.grid(True, axis="x", color=FS.GRID, lw=0.8)
+    ax.set_axisbelow(True)
+    ax.tick_params(axis="y", length=0)
+    for s in ("top", "right", "left"):
+        ax.spines[s].set_visible(False)
+    fig.tight_layout()
     fig.savefig(path, bbox_inches="tight")
     fig.savefig(path[:-4] + ".pdf", bbox_inches="tight")
     plt.close(fig)

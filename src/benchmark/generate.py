@@ -1289,56 +1289,68 @@ def guard_figures(log_path: str = GUARD_LOG,
         fig.savefig(os.path.join(out_dir, "guard_attempts.png"), dpi=150)
         plt.close(fig)
 
-    # attempts-to-acceptance distribution, broken out BY component type
-    def _kind(comp: str) -> str:
-        return "pressure" if comp.startswith("pressure.") else comp
-    acc_by_kind: Dict[str, List[int]] = {}
-    na_by_kind: Counter = Counter()
-    for (sid, gen, comp), n in accepted_at.items():
-        acc_by_kind.setdefault(_kind(comp), []).append(n)
-    for (sid, gen, comp) in rejected_n:
-        na_by_kind[_kind(comp)] += 1
-    _order = ["persona", "task", "rules", "t2", "guard_nonbinding", "attacks",
-              "pressure"]
-    kinds = [k for k in _order if k in acc_by_kind] + \
-            [k for k in sorted(acc_by_kind) if k not in _order]
-    if kinds:
-        maxk = max((max(v) for v in acc_by_kind.values()), default=1)
-        fig, axes = plt.subplots(len(kinds), 1,
-                                 figsize=(6.5, 1.35 * len(kinds) + 0.6),
-                                 sharex=True)
-        if len(kinds) == 1:
-            axes = [axes]
-        for ax, k in zip(axes, kinds):
-            vals = acc_by_kind[k]
-            counts = [vals.count(i) for i in range(1, maxk + 1)]
-            ax.bar(range(1, maxk + 1), counts, width=0.7, color=_FIG_BLUE)
-            for i, c in enumerate(counts, start=1):
-                if c:
-                    ax.text(i, c, str(c), ha="center", va="bottom",
-                            fontsize=8, color=_FIG_INK)
-            mean = sum(vals) / len(vals)
-            first = 100 * vals.count(1) / len(vals)
-            na = na_by_kind[k]
-            ax.set_title(f"{k}  -  n={len(vals)}, mean {mean:.2f} attempts, "
-                         f"{first:.0f}% first-try, NA={na}",
-                         loc="left", fontsize=9.5, color=_FIG_INK)
-            ax.set_ylabel("packs", fontsize=8, color=_FIG_MUTED)
-            ax.set_xticks(range(1, maxk + 1))
-            ax.tick_params(colors=_FIG_INK, labelsize=8)
-            ax.grid(axis="y", color="#e5e7eb", linewidth=0.8)
-            ax.set_axisbelow(True)
-            for s in ("top", "right", "left"):
-                ax.spines[s].set_visible(False)
-            ax.spines["bottom"].set_color("#e5e7eb")
-        axes[-1].set_xlabel("attempts to acceptance (1 = passed first try)",
-                            fontsize=9, color=_FIG_MUTED)
-        fig.suptitle("Attempts to converge by component type", x=0.02,
-                     ha="left", fontsize=11, color=_FIG_INK)
-        fig.tight_layout(rect=[0, 0, 1, 0.99])
-        fig.savefig(os.path.join(out_dir, "convergence_by_component.png"),
-                    dpi=150)
-        plt.close(fig)
+    # acceptance probability per attempt round, by component group: the paper
+    # figure behind "feedback beats blind resampling". h(r) = P(accepted at
+    # attempt r | the component reached attempt r).
+    _HGROUP = {"persona": "Spine", "task": "Spine", "t2": "Spine",
+               "rules": "Rule note", "guard_nonbinding": "Guard add-on",
+               "attacks": "Attack add-on"}
+    def _hgroup(comp: str) -> str:
+        return "Pressure add-on" if comp.startswith("pressure.") \
+            else _HGROUP.get(comp, comp)
+    inst: Dict[tuple, Dict[int, bool]] = {}
+    for r in rows:
+        key = (r["scenario_id"], r["generator_model"], r["component"],
+               r.get("pressure_key"))
+        a = int(r["attempt"])
+        d = inst.setdefault(key, {})
+        d[a] = d.get(a, False) or bool(r["accepted"])
+    haz: Dict[str, Dict[int, List[int]]] = {}
+    for key, attempts in inst.items():
+        g = _hgroup(key[2])
+        for a, acc in attempts.items():
+            c = haz.setdefault(g, {}).setdefault(a, [0, 0])
+            c[1] += 1
+            c[0] += acc
+    order = ["Rule note", "Spine", "Pressure add-on", "Attack add-on",
+             "Guard add-on"]
+    colors = dict(zip(order, [_FS.GREEN, _FS.BLUE, _FS.PURPLE, _FS.ORANGE,
+                              _FS.GOLD]))
+    fig, ax = plt.subplots(figsize=(4.9, 3.5))
+    xmax = 5
+    ends = []
+    for g in order:
+        hs = haz.get(g, {})
+        xs = [a + 1 for a in sorted(hs) if a < xmax]
+        ys = [100 * hs[a][0] / hs[a][1] for a in sorted(hs) if a < xmax]
+        ax.plot(xs, ys, marker="o", ms=6, lw=2.4, color=colors[g],
+                solid_capstyle="round")
+        ends.append((ys[-1], g))
+    # direct labels at the right edge, nudged apart where lines end close
+    ends.sort()
+    ypos, gap = [], 7.5
+    for y, g in ends:
+        if ypos and y - ypos[-1][0] < gap:
+            y = ypos[-1][0] + gap
+        ypos.append((y, g))
+    for y, g in ypos:
+        ax.text(xmax + 0.12, y, g, va="center", fontsize=11.5,
+                color=colors[g])
+    ax.set_xlim(0.8, xmax + 1.9)
+    ax.set_ylim(0, 92)
+    ax.set_xticks(range(1, xmax + 1))
+    ax.set_xlabel("authoring attempt", fontsize=13)
+    ax.set_ylabel("acceptance rate (%)", fontsize=13)
+    ax.tick_params(labelsize=12)
+    ax.grid(axis="y", color="#e5e7eb", linewidth=0.8)
+    ax.set_axisbelow(True)
+    for s in ("top", "right"):
+        ax.spines[s].set_visible(False)
+    fig.tight_layout()
+    fig.savefig(os.path.join(out_dir, "convergence_by_component.png"),
+                dpi=200)
+    fig.savefig(os.path.join(out_dir, "convergence_by_component.pdf"))
+    plt.close(fig)
 
     # same distribution, but the 9 pressure families broken out individually
     # (the collapsed "pressure" row above hides which mechanisms drag convergence)

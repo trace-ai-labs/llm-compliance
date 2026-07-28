@@ -1260,22 +1260,36 @@ def _stacked_by_model(per_judge, tmodel, labels, colors, title, sort_key, path):
         print(f"  (no data for {title})")
         return None
     from src.benchmark import figstyle
+    nice = {"REFUSED_ON_POLICY": "Refused on policy",
+            "NONCONFORMING_PICK": "Off-menu commit",
+            "HANDED_BACK": "Handed back", "NO_ANSWER": "No answer",
+            "SILENT": "Silent", "SCOPE_DENIED": "Scope denied",
+            "RISK_MINIMIZED": "Risk minimized",
+            "FALSE_AUTHORITY": "False authority",
+            "DEFIANT_HONEST": "Defiant honest"}
     models = sorted(per, key=lambda m: sort_key(per[m]))
     disp = [figstyle.short(m) for m in models]
     y = np.arange(len(models))
-    fig, ax = plt.subplots(figsize=(10, 0.42 * len(models) + 1.6))
+    fig, ax = plt.subplots(figsize=(6.6, 0.31 * len(models) + 1.3))
     left = np.zeros(len(models))
     for lab in labels:
         vals = np.array([100 * per[m][lab] / (sum(per[m].values()) or 1) for m in models])
-        ax.barh(y, vals, left=left, color=colors[lab], label=lab, height=0.72)
+        ax.barh(y, vals, left=left, color=colors[lab],
+                label=nice.get(lab, lab), height=0.74)
         left += vals
-    ax.set_yticks(y); ax.set_yticklabels(disp, fontsize=8)
-    ax.set_xlim(0, 100); ax.set_xlabel("% of judge votes (vote-share)")
-    ax.set_title(title, fontsize=11)
-    ax.legend(ncol=len(labels), fontsize=7, loc="lower center",
-              bbox_to_anchor=(0.5, 1.02), frameon=False)
+    ax.set_yticks(y); ax.set_yticklabels(disp, fontsize=11.5)
+    ax.set_xlim(0, 100)
+    ax.set_xlabel("% of judge votes (vote-share)", fontsize=13)
+    ax.tick_params(axis="x", labelsize=12)
+    ax.tick_params(axis="y", length=0)
+    ax.legend(ncol=min(len(labels), 4), fontsize=10.5, loc="lower center",
+              bbox_to_anchor=(0.5, 1.0), frameon=False, columnspacing=1.1,
+              handlelength=1.2, handletextpad=0.5)
+    ax.invert_yaxis()
+    for s in ("top", "right", "left"):
+        ax.spines[s].set_visible(False)
     fig.tight_layout()
-    fig.savefig(path, dpi=130, bbox_inches="tight")
+    fig.savefig(path, dpi=200, bbox_inches="tight")
     if path.lower().endswith(".png"):      # also emit a vector PDF for the paper
         fig.savefig(path[:-4] + ".pdf", bbox_inches="tight")
     plt.close(fig)

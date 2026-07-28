@@ -518,9 +518,10 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
         medvals = [_norm(_med(a), a) for a in AXES]
         medvals += medvals[:1]
         abbr = ["Def", "Prs", "Psh", "Str", "Trn", "Scp"]
-        ncols = 4
+        ncols = 6
         nrows = -(-len(sm_models) // ncols)
-        fig, axarr = plt.subplots(nrows, ncols, figsize=(3.0 * ncols, 3.1 * nrows),
+        fig, axarr = plt.subplots(nrows, ncols,
+                                  figsize=(2.1 * ncols, 2.35 * nrows),
                                   subplot_kw=dict(polar=True))
         for idx, m in enumerate(sm_models):
             ax = axarr.flat[idx]
@@ -529,17 +530,19 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
             col = FS.model_color(m)
             ax.plot(ang, medvals, color=FS.MUTED, lw=1.0, ls=":", zorder=1)
             ax.fill(ang, vals, color=col, alpha=0.25, zorder=2)
-            ax.plot(ang, vals, color=col, lw=1.6, zorder=3)
+            ax.plot(ang, vals, color=col, lw=1.8, zorder=3)
             ax.set_xticks(ang[:-1])
-            ax.set_xticklabels(abbr, fontsize=8, color=FS.INK)
+            ax.set_xticklabels(abbr, fontsize=11.5, color=FS.INK)
             ax.set_ylim(0, 1)
             ax.set_yticks([])
-            ax.set_title(f"{FS.short(m)}\n({score(m):.3f})", fontsize=10,
-                         color=FS.INK, pad=8)
-            ax.tick_params(pad=-2)
+            ax.set_title(f"{FS.short(m)}\n({score(m):.3f})", fontsize=12,
+                         color=FS.INK, pad=6)
+            ax.tick_params(pad=-3)
+            ax.grid(color=FS.GRID, lw=0.7)
+            ax.spines["polar"].set_color(FS.GRID)
         for j in range(len(sm_models), nrows * ncols):
             axarr.flat[j].axis("off")
-        fig.tight_layout(h_pad=2.2, w_pad=1.0)
+        fig.tight_layout(h_pad=1.6, w_pad=0.8)
         save(fig, "radar.png")
 
     # 4. inter-axis correlation across the real-model panel
@@ -550,16 +553,29 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
         if len(keep) >= 2:
             C = np.corrcoef(P[:, keep], rowvar=False)
             labs = [FS.AXIS_LABEL[AXES[j]] for j in keep]
-            fig, ax = plt.subplots(figsize=(1.15 * len(keep) + 2.5,
-                                            1.15 * len(keep) + 2.5))
-            im = ax.imshow(C, cmap=FS.CORR_CMAP, vmin=-1, vmax=1)
-            ax.set_xticks(range(len(keep))); ax.set_xticklabels(labs)
-            ax.set_yticks(range(len(keep))); ax.set_yticklabels(labs)
+            # lower triangle only (the matrix is symmetric), values annotated,
+            # no colorbar or in-figure title: the numbers carry the value
+            M = np.ma.masked_where(np.triu(np.ones_like(C), k=1) > 0, C)
+            fig, ax = plt.subplots(figsize=(5.8, 5.4))
+            cmap = plt.get_cmap(FS.CORR_CMAP).copy()
+            cmap.set_bad("white")
+            ax.imshow(M, cmap=cmap, vmin=-1, vmax=1)
+            shortlab = ["Default", "Pressure", "Pushback", "Steer.",
+                        "Transp.", "Scope"]
+            ax.set_xticks(range(len(keep)))
+            ax.set_xticklabels([shortlab[j] for j in keep], fontsize=12.5,
+                               rotation=22, ha="right")
+            ax.set_yticks(range(len(keep)))
+            ax.set_yticklabels(labs, fontsize=12.5)
             for i in range(len(keep)):
-                for j in range(len(keep)):
-                    ax.text(j, i, f"{C[i, j]:.2f}", ha="center", va="center",
-                            fontsize=12)
-            fig.colorbar(im, ax=ax, shrink=0.7, label="Pearson r")
+                for j in range(i + 1):
+                    v = C[i, j]
+                    ax.text(j, i, f"{v:.2f}", ha="center", va="center",
+                            fontsize=14.5,
+                            color="white" if abs(v) > 0.75 else FS.INK)
+            ax.tick_params(length=0)
+            for s in ax.spines.values():
+                s.set_visible(False)
             fig.tight_layout(); save(fig, "axis_correlation.png")
 
     # 5 & 6. per-domain and per-pressure (fragility) base-arm compliance, panel
@@ -573,22 +589,27 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
             pre_r[(m, c.pressure)].append(c.rate)
 
     def heat(rowmodels, cols, collabels, cellmap, fname, xlab):
+        """Annotated model-by-column heatmap: values x100 (no colorbar or
+        in-figure title; the caption explains, the shade is a redundant cue)."""
         mat = np.array([[np.mean(cellmap[(m, c)]) if cellmap.get((m, c)) else np.nan
                          for c in cols] for m in rowmodels])
-        fig, ax = plt.subplots(figsize=(0.62 * len(cols) + 3,
-                                        0.55 * len(rowmodels) + 1.8))
-        im = ax.imshow(mat, cmap=FS.SCORE_CMAP, vmin=0, vmax=1, aspect="auto")
+        fig, ax = plt.subplots(figsize=(0.78 * len(cols) + 2.2,
+                                        0.42 * len(rowmodels) + 1.4))
+        ax.imshow(mat, cmap=FS.SCORE_CMAP, vmin=0.4, vmax=1, aspect="auto")
         ax.set_xticks(range(len(cols)))
-        ax.set_xticklabels(collabels, rotation=40, ha="right")
+        ax.set_xticklabels(collabels, fontsize=14, rotation=30, ha="right")
         ax.set_yticks(range(len(rowmodels)))
-        ax.set_yticklabels([FS.short(m) for m in rowmodels])
+        ax.set_yticklabels([FS.short(m) for m in rowmodels], fontsize=14)
         for i in range(len(rowmodels)):
             for j in range(len(cols)):
                 if not np.isnan(mat[i, j]):
-                    ax.text(j, i, f"{mat[i, j]:.2f}", ha="center", va="center",
-                            fontsize=10, color=FS.INK)
-        ax.set_xlabel(xlab)
-        fig.colorbar(im, ax=ax, shrink=0.7, label="T1 compliance (base arm)")
+                    v = mat[i, j]
+                    ax.text(j, i, f"{100 * v:.0f}", ha="center", va="center",
+                            fontsize=14,
+                            color="white" if v >= 0.965 else FS.INK)
+        ax.tick_params(length=0)
+        for s in ax.spines.values():
+            s.set_visible(False)
         fig.tight_layout(); save(fig, fname)
 
     if panel:
