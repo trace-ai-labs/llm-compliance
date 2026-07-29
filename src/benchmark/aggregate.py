@@ -547,31 +547,33 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
 
         # 3b. quad radar for the main text: four contrasting profiles in one
         # horizontal row (same panel-wide normalization and median reference as
-        # 3), sized for a full-width figure*; positive tick padding keeps the
-        # spoke labels clear of the hexagon and the padded title clear of both.
+        # 3). The strip sits in a SINGLE column, so the canvas is kept small
+        # relative to its fonts: every label must survive a ~0.47x scale to
+        # columnwidth. Positive tick padding keeps the spoke labels clear of
+        # the hexagon and the padded title clear of both.
         quad_short = ["Kimi-K2.7-Code", "Claude Haiku 4.5", "GPT-5.6 Luna",
                       "DeepSeek-V4-Pro"]
         quad = [m for s in quad_short for m in sm_models if FS.short(m) == s]
         if len(quad) == 4:
-            fig, axarr = plt.subplots(1, 4, figsize=(9.4, 2.9),
+            fig, axarr = plt.subplots(1, 4, figsize=(7.0, 2.4),
                                       subplot_kw=dict(polar=True))
             for ax, m in zip(axarr, quad):
                 vals = [_norm(profiles[m]["axes"][a] or 0.0, a) for a in AXES]
                 vals += vals[:1]
                 col = FS.model_color(m)
-                ax.plot(ang, medvals, color=FS.MUTED, lw=1.0, ls=":", zorder=1)
+                ax.plot(ang, medvals, color=FS.MUTED, lw=0.9, ls=":", zorder=1)
                 ax.fill(ang, vals, color=col, alpha=0.25, zorder=2)
-                ax.plot(ang, vals, color=col, lw=2.2, zorder=3)
+                ax.plot(ang, vals, color=col, lw=1.8, zorder=3)
                 ax.set_xticks(ang[:-1])
                 ax.set_xticklabels(abbr, fontsize=13, color=FS.INK)
                 ax.set_ylim(0, 1)
                 ax.set_yticks([])
                 ax.set_title(f"{FS.short(m)}\n({score(m):.3f})", fontsize=12.5,
-                             color=FS.INK, pad=16)
-                ax.tick_params(pad=3)
-                ax.grid(color=FS.GRID, lw=0.7)
+                             color=FS.INK, pad=11)
+                ax.tick_params(pad=2)
+                ax.grid(color=FS.GRID, lw=0.6)
                 ax.spines["polar"].set_color(FS.GRID)
-            fig.tight_layout(w_pad=1.4)
+            fig.tight_layout(w_pad=1.0)
             save(fig, "radar_quad.png")
 
     # 4. inter-axis correlation across the real-model panel
