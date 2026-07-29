@@ -555,7 +555,7 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
                       "DeepSeek-V4-Pro"]
         quad = [m for s in quad_short for m in sm_models if FS.short(m) == s]
         if len(quad) == 4:
-            fig, axarr = plt.subplots(1, 4, figsize=(7.0, 2.4),
+            fig, axarr = plt.subplots(1, 4, figsize=(7.0, 2.35),
                                       subplot_kw=dict(polar=True))
             for ax, m in zip(axarr, quad):
                 vals = [_norm(profiles[m]["axes"][a] or 0.0, a) for a in AXES]
@@ -568,8 +568,9 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
                 ax.set_xticklabels(abbr, fontsize=13, color=FS.INK)
                 ax.set_ylim(0, 1)
                 ax.set_yticks([])
-                ax.set_title(f"{FS.short(m)}\n({score(m):.3f})", fontsize=12.5,
-                             color=FS.INK, pad=11)
+                # name only: at column scale a second (score) line is
+                # unreadable, and the leaderboard already carries the number
+                ax.set_title(FS.short(m), fontsize=12.5, color=FS.INK, pad=17)
                 ax.tick_params(pad=2)
                 ax.grid(color=FS.GRID, lw=0.6)
                 ax.spines["polar"].set_color(FS.GRID)
