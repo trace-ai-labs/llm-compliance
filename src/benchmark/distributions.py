@@ -195,52 +195,52 @@ def _pearson(a: Sequence[float], b: Sequence[float]) -> float:
     return cov / (sa * sb) if sa and sb else 0.0
 
 
-def plot_steer_baseline(da: Dict[str, Dict[str, Optional[float]]], path: str) -> None:
-    """Scatter of domain baseline compliance vs steerability. Preempts the
-    'more room -> higher recovery' confound: if headroom drove steerability the
-    slope would be negative; it is not."""
+def plot_compliance_transparency(da: Dict[str, Dict[str, Optional[float]]],
+                                 tbd: Dict[str, Optional[float]],
+                                 path: str) -> None:
+    """Scatter of per-domain Default Compliance (panel mean) against
+    Transparency (pooled over the panel's judged violations in the domain), one
+    dot per domain (main-paper fig:comptrans). Shows that where models violate
+    most is not where they disclose most: the two most transparent domains are
+    the hardest (procurement) and the easiest (government services)."""
     import matplotlib.pyplot as plt
     FS.use_paper_style()
     doms = [d for d in da if da[d]["default_compliance"] is not None
-            and da[d]["steerability"] is not None]
+            and tbd.get(d) is not None]
     x = [da[d]["default_compliance"] for d in doms]
-    y = [da[d]["steerability"] for d in doms]
+    y = [tbd[d] for d in doms]
     r = _pearson(x, y)
-    fig, ax = plt.subplots(figsize=(5.0, 3.9))
-    # light least-squares trend behind the points, so the positive slope the
-    # caption argues from is visible rather than implied
-    n = len(x)
-    mx, my = sum(x) / n, sum(y) / n
-    b = sum((a - mx) * (c - my) for a, c in zip(x, y)) / \
-        sum((a - mx) ** 2 for a in x)
-    xs = [min(x) - 0.01, max(x) + 0.01]
-    ax.plot(xs, [my + b * (v - mx) for v in xs], color=FS.MUTED, lw=1.6,
-            ls="--", zorder=2, alpha=0.8)
-    ax.scatter(x, y, s=64, color=FS.BLUE, zorder=3)
-    # per-domain label offsets tuned against collisions; the tight top-right
-    # cluster gets displaced labels with thin leader lines
-    nudge = {"Gov. Services": (-9, -3), "AML": (-9, 2), "Privacy": (8, -3),
-             "Finance": (-9, 2), "Export Controls": (14, 14),
-             "Customer Service": (16, -4), "Pharma": (14, -18),
-             "Moderation": (-14, -16)}
-    leader = {"Export Controls", "Customer Service", "Pharma", "Moderation"}
+    fig, ax = plt.subplots(figsize=(5.0, 4.0))
+    ax.scatter(x, y, s=70, color=FS.BLUE, zorder=3)
+    # the right margin is widened so the tight right-hand cluster can hang two
+    # labels outside the data range; the rest are nudged against collisions,
+    # with thin leader lines wherever a label is displaced far from its dot
+    ax.set_xlim(0.735, 1.10)
+    nudge = {"Procurement": (8, -12), "Gov. Services": (-9, 0),
+             "Finance": (-9, 3), "Moderation": (2, 10),
+             "Export Controls": (-28, 18), "Pharma": (7, 3),
+             "Customer Service": (22, -13), "Privacy": (-9, -4),
+             "AML": (7, -3), "Healthcare": (8, 2), "HR/Hiring": (-9, 0),
+             "Advertising": (-9, 5)}
+    leader = {"Export Controls", "Customer Service"}
     for d, xi, yi in zip(doms, x, y):
         s = short_domain(d)
-        dx, dy = nudge.get(s, (7, 4))
+        dx, dy = nudge.get(s, (8, 4))
         kw = dict(fontsize=11, xytext=(dx, dy), textcoords="offset points",
                   ha="right" if dx < 0 else "left", va="center", color=FS.INK)
         if s in leader:
             kw["arrowprops"] = dict(arrowstyle="-", lw=0.8, color="#9ca3af",
                                     shrinkA=2, shrinkB=3)
         ax.annotate(s, (xi, yi), **kw)
-    ax.set_xlabel("base-mode default compliance (panel mean)", fontsize=13)
-    ax.set_ylabel("steerability (recovery)", fontsize=13)
+    ax.set_xlabel("Default Compliance", fontsize=13.5)
+    ax.set_ylabel("Transparency", fontsize=13.5)
+    ax.set_xticks([0.8, 0.9, 1.0])
     ax.tick_params(labelsize=12)
     ax.grid(True, color=FS.GRID, lw=0.8)
     ax.set_axisbelow(True)
     FS.strip_axes(ax)
-    ax.text(0.02, 0.95, f"$r = {r:+.2f}$", transform=ax.transAxes,
-            fontsize=12.5, va="top", color=FS.INK)
+    ax.text(0.02, 0.10, f"$r = {r:+.2f}$", transform=ax.transAxes,
+            fontsize=12.5, va="bottom", color=FS.INK)
     fig.tight_layout()
     fig.savefig(path, bbox_inches="tight")
     fig.savefig(path[:-4] + ".pdf", bbox_inches="tight")
@@ -266,44 +266,6 @@ def significance_summary(contrasts_path: str, metrics_path: str) -> dict:
                        if pbh.get(frozenset((top, m)), 0.0) >= 0.05]
     return {"n_pairs": len(rows), "n_sig": n_sig, "top": top,
             "cluster": cluster, "order": order, "pact": met}
-
-
-def plot_pact_ci(metrics_path: str, path: str) -> None:
-    """Caterpillar plot: PACTScore point estimate with 95% CI for every model,
-    ordered best-first. The dashed line marks the best model's lower CI bound;
-    any interval crossing it is not separable from the top at the margin, which
-    is why the ranking's head is a cluster, not a single winner. (The rigorous
-    paired-test cluster is reported in the text.)"""
-    import matplotlib.pyplot as plt
-    FS.use_paper_style()
-    with open(metrics_path, encoding="utf-8") as f:
-        rows = [r for r in csv.DictReader(f)
-                if r.get("pact_score_lo") not in ("", None)]
-    rows.sort(key=lambda r: float(r["pact_score"]))
-    best_lo = float(max(rows, key=lambda r: float(r["pact_score"]))["pact_score_lo"])
-    ys = range(len(rows))
-    fig, ax = plt.subplots(figsize=(5.2, 6.6))
-    for y, r in zip(ys, rows):
-        v = float(r["pact_score"])
-        lo, hi = float(r["pact_score_lo"]), float(r["pact_score_hi"])
-        col = FS.BLUE if hi >= best_lo else FS.MUTED
-        ax.plot([lo, hi], [y, y], color=col, lw=2.4, zorder=2,
-                solid_capstyle="round")
-        ax.scatter([v], [y], color=col, s=46, zorder=3)
-    ax.set_yticks(list(ys))
-    ax.set_yticklabels([FS.short(r["model"]) for r in rows], fontsize=12)
-    ax.set_xlabel("PACTScore", fontsize=13.5)
-    ax.tick_params(axis="x", labelsize=12)
-    ax.axvline(best_lo, color=FS.RED, ls="--", lw=1.2, alpha=0.7, zorder=1)
-    ax.grid(True, axis="x", color=FS.GRID, lw=0.8)
-    ax.set_axisbelow(True)
-    ax.tick_params(axis="y", length=0)
-    for s in ("top", "right", "left"):
-        ax.spines[s].set_visible(False)
-    fig.tight_layout()
-    fig.savefig(path, bbox_inches="tight")
-    fig.savefig(path[:-4] + ".pdf", bbox_inches="tight")
-    plt.close(fig)
 
 
 def main() -> None:
@@ -363,19 +325,25 @@ def main() -> None:
                [[m] + [_cell_mean(m, want_pressure=f) for f in fams]
                 for m in models])
 
-    # 4. steerability vs baseline scatter (refutes the headroom confound)
-    plot_steer_baseline(da, os.path.join(FIG_DIR, "steer_baseline.png"))
+    # 4. per-domain Default Compliance vs Transparency scatter (main paper).
+    # The domain steerability-vs-baseline r is still printed for the appendix
+    # prose (the headroom check); its scatter was retired for this figure.
+    plot_compliance_transparency(
+        da, tbd, os.path.join(FIG_DIR, "compliance_transparency.png"))
     dd = [da[d]["default_compliance"] for d in da]
     ss = [da[d]["steerability"] for d in da]
+    tt = [tbd[d] for d in da if tbd.get(d) is not None]
+    dd_t = [da[d]["default_compliance"] for d in da if tbd.get(d) is not None]
     print(f"\n  r(domain default, steerability) = {_pearson(dd, ss):+.2f}  "
           f"(headroom would predict a negative slope)")
+    print(f"  r(domain default, transparency) = {_pearson(dd_t, tt):+.2f}")
 
-    # 5. PACTScore CIs + pairwise significance (uncertainty reporting)
+    # 5. pairwise significance (uncertainty reporting; the per-axis CI table is
+    # built by axis_ci.py + make_paper_assets)
     metrics_path = os.path.join(OUT_DIR, "metrics_v2.csv")
     contrasts_path = os.path.join(OUT_DIR, "contrasts_v2.csv")
     if os.path.exists(metrics_path) and os.path.exists(contrasts_path):
         sig = significance_summary(contrasts_path, metrics_path)
-        plot_pact_ci(metrics_path, os.path.join(FIG_DIR, "pact_ci.png"))
         print(f"\n  pairwise: {sig['n_sig']}/{sig['n_pairs']} significant at BH p<0.05; "
               f"top cluster (tied with {FS.short(sig['top'])}): "
               f"{len(sig['cluster'])} models -> {[FS.short(m) for m in sig['cluster']]}")

@@ -1317,7 +1317,6 @@ def guard_figures(log_path: str = GUARD_LOG,
                               _FS.PURPLE, _FS.ORANGE, _FS.GOLD]))
     fig, ax = plt.subplots(figsize=(5.0, 3.6))
     xmax = 6
-    ends = []
     for g in order:
         vals = groups[g]
         n = len(vals)
@@ -1325,21 +1324,16 @@ def guard_figures(log_path: str = GUARD_LOG,
         ys = [100 * sum(1 for a in vals if a is not None and a + 1 <= k) / n
               for k in xs]
         ax.plot(xs, ys, marker="o", ms=5, lw=2.2, color=colors[g],
-                solid_capstyle="round")
-        ends.append((ys[-1], g, colors[g]))
-    ends.sort()
-    ypos, gap = [], 6.4
-    for y, lab, col in ends:
-        if ypos and y - ypos[-1][0] < gap:
-            y = ypos[-1][0] + gap
-        ypos.append((y, lab, col))
-    for y, lab, col in ypos:
-        ax.text(xmax + 0.15, y, lab, va="center", fontsize=11, color=col)
-    ax.set_xlim(0.8, xmax + 2.6)
+                solid_capstyle="round", label=g)
+    # a real legend (color: name) in the empty lower-right corner, instead of
+    # per-curve labels floating beside the line ends
+    ax.legend(loc="lower right", frameon=False, fontsize=10.5,
+              handlelength=1.6, handletextpad=0.5, labelspacing=0.35)
+    ax.set_xlim(0.8, xmax + 0.2)
     ax.set_ylim(0, 104)
     ax.set_xticks(range(1, xmax + 1))
-    ax.set_xlabel("authoring attempts", fontsize=13)
-    ax.set_ylabel("components accepted (%)", fontsize=13)
+    ax.set_xlabel("Authoring Attempts", fontsize=13)
+    ax.set_ylabel("Components Accepted (%)", fontsize=13)
     ax.tick_params(labelsize=12)
     ax.grid(axis="y", color="#e5e7eb", linewidth=0.8)
     ax.set_axisbelow(True)
@@ -1406,8 +1400,12 @@ def guard_figures(log_path: str = GUARD_LOG,
     for r in judged:
         if r["verdict"] == "PASS":
             key = (r["scenario_id"], r["component"], r["guard_model"])
-            norm = r["attempt"] - first_attempt[(r["scenario_id"],
-                                                 r["component"])] + 1
+            # a review row whose (scenario, component) never appears in the
+            # attempt map (e.g. a stray legacy log row) is skipped, not fatal
+            first = first_attempt.get((r["scenario_id"], r["component"]))
+            if first is None:
+                continue
+            norm = r["attempt"] - first + 1
             gfp[key] = min(gfp.get(key, 10 ** 9), norm)
     gfp_by_guard: Dict[str, List[int]] = {}
     for (sid, comp, gm), n in gfp.items():

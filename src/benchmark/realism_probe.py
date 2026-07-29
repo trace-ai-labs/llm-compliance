@@ -672,10 +672,14 @@ def preview(n: int, items_path: str, seed: int, workers: int) -> None:
 
 def figure(summary_path: str = os.path.join(OUT_DIR, "summary.csv"),
            out_name: str = "eval_awareness") -> str:
-    """Per-model realism-ladder deltas as a diverging barh (paper fig:evalaware),
-    rendered from summary.csv (the `report` command writes it). Effects are the
-    share of native non-compliance removed, dR / (1 - C0); labels use the paper's
-    rung names (realism-stripped / announced), never the R0/R1/R2 codes."""
+    """Per-model realism-ladder effects as paired diverging bars (paper
+    fig:evalaware), rendered from summary.csv (the `report` command writes it).
+    One row per model, two bars: the share of native non-compliance each altered
+    form removes, (C - C0) / (1 - C0). Bars right of zero mean the model complies
+    more once the item looks like a test; left of zero, less. This plots the
+    effect the table and the prose discuss directly, instead of asking the reader
+    to subtract three near-ceiling compliance markers by eye. Labels use the
+    paper's rung names (realism-stripped / announced), never the R0/R1/R2 codes."""
     import csv as _csv
     import matplotlib
     matplotlib.use("Agg")
@@ -690,37 +694,32 @@ def figure(summary_path: str = os.path.join(OUT_DIR, "summary.csv"),
     recs = []
     for r in rows:
         mid = MODEL_REGISTRY.get(r["model"], r["model"])
+        c0, c1, c2 = (float(r["C0"]), float(r["C1"]), float(r["C2"]))
         recs.append(dict(name=FS.short(mid),
-                         c0=100 * float(r["C0"]), c1=100 * float(r["C1"]),
-                         c2=100 * float(r["C2"])))
-    # sorted by how far the announced frame moves the model
-    recs.sort(key=lambda d: d["c2"] - d["c0"])
+                         e1=100 * (c1 - c0) / (1 - c0),
+                         e2=100 * (c2 - c0) / (1 - c0)))
+    # sorted by the announced-frame effect, biggest gain on top
+    recs.sort(key=lambda d: d["e2"])
 
     y = np.arange(len(recs))
-    row_h = 0.42 if len(recs) <= 14 else 0.33   # full 21-model panel stays column-sized
-    fig, ax = plt.subplots(figsize=(5.4, row_h * len(recs) + 1.3))
-    for i, d in enumerate(recs):
-        lo = min(d["c0"], d["c1"], d["c2"])
-        hi = max(d["c0"], d["c1"], d["c2"])
-        ax.plot([lo, hi], [i, i], color=FS.GRID, lw=2.2, zorder=1,
-                solid_capstyle="round")
-        ax.scatter([d["c1"]], [i], s=64, marker="s", color="#9ca3af", zorder=2)
-        ax.scatter([d["c2"]], [i], s=80, marker="D", color=FS.RED, zorder=3)
-        ax.scatter([d["c0"]], [i], s=90, color=FS.BLUE, zorder=4)
+    h = 0.38
+    fig, ax = plt.subplots(figsize=(5.4, 0.44 * len(recs) + 1.2))
+    ax.barh(y + h / 2, [d["e2"] for d in recs], height=h, color=FS.BLUE,
+            label="Announced as a Test", zorder=3)
+    ax.barh(y - h / 2, [d["e1"] for d in recs], height=h, color="#9ca3af",
+            label="Realism Stripped", zorder=3)
+    ax.axvline(0, color=FS.INK, lw=1.0, zorder=4)
     ax.set_yticks(y)
     ax.set_yticklabels([d["name"] for d in recs], fontsize=12)
-    ax.set_xlabel("turn-1 compliance (%)", fontsize=13)
+    ax.set_xlabel("Native Non-Compliance Removed (%)", fontsize=13)
     ax.tick_params(axis="x", labelsize=12)
     ax.tick_params(axis="y", length=0)
-    handles = [plt.Line2D([], [], marker="o", ls="", color=FS.BLUE, ms=9),
-               plt.Line2D([], [], marker="s", ls="", color="#9ca3af", ms=8),
-               plt.Line2D([], [], marker="D", ls="", color=FS.RED, ms=8)]
-    ax.legend(handles, ["native item", "realism stripped", "announced as a test"],
-              fontsize=11, loc="upper left", frameon=False,
-              handletextpad=0.4)
+    ax.legend(fontsize=11, loc="lower right", frameon=False,
+              handletextpad=0.5, handlelength=1.4)
     ax.grid(axis="x", color=FS.GRID, lw=0.8)
     ax.set_axisbelow(True)
     FS.strip_axes(ax)
+    ax.spines["left"].set_visible(False)
     fig.tight_layout()
 
     fig_dir = os.path.join("results", "benchmark", "figures")

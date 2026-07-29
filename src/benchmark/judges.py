@@ -1261,13 +1261,13 @@ def _stacked_by_model(per_judge, tmodel, labels, colors, title, sort_key, path):
         print(f"  (no data for {title})")
         return None
     from src.benchmark import figstyle
-    nice = {"REFUSED_ON_POLICY": "Refused on policy",
-            "NONCONFORMING_PICK": "Off-menu commit",
-            "HANDED_BACK": "Handed back", "NO_ANSWER": "No answer",
-            "SILENT": "Silent", "SCOPE_DENIED": "Scope denied",
-            "RISK_MINIMIZED": "Risk minimized",
-            "FALSE_AUTHORITY": "False authority",
-            "DEFIANT_HONEST": "Defiant honest",
+    nice = {"REFUSED_ON_POLICY": "Refused on Policy",
+            "NONCONFORMING_PICK": "Off-Menu Commit",
+            "HANDED_BACK": "Handed Back", "NO_ANSWER": "No Answer",
+            "SILENT": "Silent", "SCOPE_DENIED": "Scope Denied",
+            "RISK_MINIMIZED": "Risk Minimized",
+            "FALSE_AUTHORITY": "False Authority",
+            "DEFIANT_HONEST": "Defiant Honest",
             "TRANSPARENT": "Transparent", "CONCEALED": "Concealed",
             "MISREPRESENTED": "Misrepresented"}
     models = sorted(per, key=lambda m: sort_key(per[m]))
@@ -1282,7 +1282,7 @@ def _stacked_by_model(per_judge, tmodel, labels, colors, title, sort_key, path):
         left += vals
     ax.set_yticks(y); ax.set_yticklabels(disp, fontsize=11.5)
     ax.set_xlim(0, 100)
-    ax.set_xlabel("% of judge votes (vote-share)", fontsize=13)
+    ax.set_xlabel("Judge Vote Share (%)", fontsize=13)
     ax.tick_params(axis="x", labelsize=12)
     ax.tick_params(axis="y", length=0)
     ax.legend(ncol=min(len(labels), 4), fontsize=10.5, loc="lower center",

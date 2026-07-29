@@ -545,31 +545,34 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
         fig.tight_layout(h_pad=1.6, w_pad=0.8)
         save(fig, "radar.png")
 
-        # 3b. quad radar for the main text: four contrasting profiles in one
-        # row (same panel-wide normalization and median reference as 3).
+        # 3b. quad radar for the main text: four contrasting profiles in a 2x2
+        # grid (same panel-wide normalization and median reference as 3). The
+        # figure sits in a SINGLE column, so the grid is square rather than a
+        # 4-wide strip and every label is sized to survive columnwidth scaling;
+        # positive tick padding keeps the spoke labels clear of the hexagon.
         quad_short = ["Kimi-K2.7-Code", "Claude Haiku 4.5", "GPT-5.6 Luna",
                       "DeepSeek-V4-Pro"]
         quad = [m for s in quad_short for m in sm_models if FS.short(m) == s]
         if len(quad) == 4:
-            fig, axarr = plt.subplots(1, 4, figsize=(2.3 * 4, 2.55),
+            fig, axarr = plt.subplots(2, 2, figsize=(4.9, 5.8),
                                       subplot_kw=dict(polar=True))
-            for ax, m in zip(axarr, quad):
+            for ax, m in zip(axarr.flat, quad):
                 vals = [_norm(profiles[m]["axes"][a] or 0.0, a) for a in AXES]
                 vals += vals[:1]
                 col = FS.model_color(m)
                 ax.plot(ang, medvals, color=FS.MUTED, lw=1.0, ls=":", zorder=1)
                 ax.fill(ang, vals, color=col, alpha=0.25, zorder=2)
-                ax.plot(ang, vals, color=col, lw=2.0, zorder=3)
+                ax.plot(ang, vals, color=col, lw=2.2, zorder=3)
                 ax.set_xticks(ang[:-1])
-                ax.set_xticklabels(abbr, fontsize=11, color=FS.INK)
+                ax.set_xticklabels(abbr, fontsize=16, color=FS.INK)
                 ax.set_ylim(0, 1)
                 ax.set_yticks([])
-                ax.set_title(f"{FS.short(m)}\n({score(m):.3f})", fontsize=12,
-                             color=FS.INK, pad=6)
-                ax.tick_params(pad=-3)
+                ax.set_title(f"{FS.short(m)}\n({score(m):.3f})", fontsize=15,
+                             color=FS.INK, pad=26)
+                ax.tick_params(pad=4)
                 ax.grid(color=FS.GRID, lw=0.7)
                 ax.spines["polar"].set_color(FS.GRID)
-            fig.tight_layout(w_pad=0.9)
+            fig.tight_layout(w_pad=1.6, h_pad=2.4)
             save(fig, "radar_quad.png")
 
     # 4. inter-axis correlation across the real-model panel
@@ -586,7 +589,9 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
             fig, ax = plt.subplots(figsize=(5.8, 5.4))
             cmap = plt.get_cmap(FS.CORR_CMAP).copy()
             cmap.set_bad("white")
-            ax.imshow(M, cmap=cmap, vmin=-1, vmax=1)
+            # sequential blue ramp anchored at 0 (the panel's correlations are all
+            # >= ~0; the lone -0.03 clips to white, which reads correctly as "none")
+            ax.imshow(M, cmap=cmap, vmin=0, vmax=1)
             shortlab = ["Default", "Pressure", "Pushback", "Steer.",
                         "Transp.", "Scope"]
             ax.set_xticks(range(len(keep)))
@@ -599,7 +604,7 @@ def metric_figures(profiles: Dict[str, Dict], cells: Dict, out_dir: str = FIG_DI
                     v = C[i, j]
                     ax.text(j, i, f"{v:.2f}", ha="center", va="center",
                             fontsize=14.5,
-                            color="white" if abs(v) > 0.75 else FS.INK)
+                            color="white" if v > 0.65 else FS.INK)
             ax.tick_params(length=0)
             for s in ax.spines.values():
                 s.set_visible(False)

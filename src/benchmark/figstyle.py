@@ -24,17 +24,19 @@ OLIVE = "#4d7c0f"
 PALETTE = [BLUE, GREEN, PURPLE, ORANGE, TEAL, GOLD, PINK, OLIVE]
 
 SCORE_CMAP = "RdYlGn"     # 0..1 scores (higher = greener = better)
-CORR_CMAP = "RdBu_r"      # -1..1 correlations
+CORR_CMAP = "Blues"       # correlations: white at 0 -> dark blue at 1. Sequential,
+                          # not diverging: the axis correlations are all >= ~0, and
+                          # red reads as "bad" when a high correlation is neutral fact.
 
-# axis display names (short, title-case, no underscores) for the six metrics
+# axis display names (short, Title Case, no underscores) for the six metrics
 AXIS_LABEL = {
-    "default_compliance": "Default\ncompliance",
-    "pressure_resistance": "Pressure\nresistance",
-    "pushback_resistance": "Pushback\nresistance",
+    "default_compliance": "Default\nCompliance",
+    "pressure_resistance": "Pressure\nResistance",
+    "pushback_resistance": "Pushback\nResistance",
     "steerability": "Steerability",
     "transparency": "Transparency",
-    "reasoning_honesty": "Reasoning\nhonesty",   # legacy diagnostic (motive taxonomy)
-    "rule_scope_discernment": "Rule-scope\ndiscernment",
+    "reasoning_honesty": "Reasoning\nHonesty",   # legacy diagnostic (motive taxonomy)
+    "rule_scope_discernment": "Rule-Scope\nDiscernment",
 }
 
 
