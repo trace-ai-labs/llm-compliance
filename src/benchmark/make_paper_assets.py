@@ -79,7 +79,7 @@ PAPER_FIGURES = [
     "eval_awareness.png",       # appendix: realism-ladder compliance by rung
     "convergence_by_component.png",  # appendix gendiag: cumulative acceptance
     "dataset_by_domain_group.png",   # appendix gendiag: frozen-set composition
-    "compliance_transparency.png",   # results: per-domain compliance vs transparency
+    "scope_default.png",     # results: per-domain scope discernment vs compliance
 ]
 
 

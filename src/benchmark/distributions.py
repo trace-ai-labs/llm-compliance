@@ -195,31 +195,35 @@ def _pearson(a: Sequence[float], b: Sequence[float]) -> float:
     return cov / (sa * sb) if sa and sb else 0.0
 
 
-def plot_compliance_transparency(da: Dict[str, Dict[str, Optional[float]]],
-                                 tbd: Dict[str, Optional[float]],
-                                 path: str) -> None:
-    """Scatter of per-domain Default Compliance (panel mean) against
-    Transparency (pooled over the panel's judged violations in the domain), one
-    dot per domain (main-paper fig:comptrans). Shows that where models violate
-    most is not where they disclose most: the two most transparent domains are
-    the hardest (procurement) and the easiest (government services)."""
+def plot_scope_default(da: Dict[str, Dict[str, Optional[float]]],
+                       path: str) -> None:
+    """Scatter of per-domain Default Compliance (panel mean) against Rule-Scope
+    Discernment, one dot per domain, with the y = x parity line (main-paper
+    fig:scopedefault). Every domain sits below the line - scope discernment
+    trails compliance everywhere - and the drop is largest in the most
+    safety-sensitive domains (privacy, AML, pharma), where models over-apply
+    rules to requests they do not cover."""
     import matplotlib.pyplot as plt
     FS.use_paper_style()
     doms = [d for d in da if da[d]["default_compliance"] is not None
-            and tbd.get(d) is not None]
+            and da[d]["rule_scope_discernment"] is not None]
     x = [da[d]["default_compliance"] for d in doms]
-    y = [tbd[d] for d in doms]
-    fig, ax = plt.subplots(figsize=(5.0, 4.0))
+    y = [da[d]["rule_scope_discernment"] for d in doms]
+    fig, ax = plt.subplots(figsize=(5.0, 4.2))
+    # parity line first, so the reading is "distance below y = x"
+    ax.plot([0.70, 1.005], [0.70, 1.005], ls="--", lw=1.4, color=FS.MUTED,
+            zorder=2)
     ax.scatter(x, y, s=70, color=FS.BLUE, zorder=3)
     # the right margin is widened so the tight right-hand cluster can hang its
     # labels beside the dots; every label sits directly adjacent to its point
-    ax.set_xlim(0.735, 1.10)
-    nudge = {"Procurement": (8, -2), "Gov. Services": (-9, 0),
-             "Finance": (-9, 3), "Moderation": (2, 10),
-             "Export Controls": (-4, 10), "Pharma": (7, 3),
-             "Customer Service": (7, -10), "Privacy": (-9, -4),
-             "AML": (7, -3), "Healthcare": (8, 2), "HR/Hiring": (-9, 0),
-             "Advertising": (-9, 5)}
+    ax.set_xlim(0.72, 1.10)
+    ax.set_ylim(0.70, 1.005)
+    nudge = {"Procurement": (8, -6), "Healthcare": (8, -4),
+             "HR/Hiring": (-9, 0), "Advertising": (-9, 5),
+             "Finance": (-9, 8), "AML": (-9, -3), "Privacy": (8, -3),
+             "Customer Service": (-9, 2), "Moderation": (-9, 4),
+             "Export Controls": (7, 9), "Pharma": (7, -2),
+             "Gov. Services": (7, 2)}
     for d, xi, yi in zip(doms, x, y):
         s = short_domain(d)
         dx, dy = nudge.get(s, (8, 4))
@@ -227,8 +231,9 @@ def plot_compliance_transparency(da: Dict[str, Dict[str, Optional[float]]],
                     textcoords="offset points",
                     ha="right" if dx < 0 else "left", va="center", color=FS.INK)
     ax.set_xlabel("Default Compliance", fontsize=13.5)
-    ax.set_ylabel("Transparency", fontsize=13.5)
+    ax.set_ylabel("Rule-Scope Discernment", fontsize=13.5)
     ax.set_xticks([0.8, 0.9, 1.0])
+    ax.set_yticks([0.7, 0.8, 0.9, 1.0])
     ax.tick_params(labelsize=12)
     ax.grid(True, color=FS.GRID, lw=0.8)
     ax.set_axisbelow(True)
@@ -317,18 +322,17 @@ def main() -> None:
                [[m] + [_cell_mean(m, want_pressure=f) for f in fams]
                 for m in models])
 
-    # 4. per-domain Default Compliance vs Transparency scatter (main paper).
-    # The domain steerability-vs-baseline r is still printed for the appendix
-    # prose (the headroom check); its scatter was retired for this figure.
-    plot_compliance_transparency(
-        da, tbd, os.path.join(FIG_DIR, "compliance_transparency.png"))
+    # 4. per-domain Default Compliance vs Rule-Scope Discernment scatter with
+    # the y = x parity line (main paper). The domain steerability-vs-baseline r
+    # is still printed for the appendix prose (the headroom check); its scatter
+    # was retired for this figure.
+    plot_scope_default(da, os.path.join(FIG_DIR, "scope_default.png"))
     dd = [da[d]["default_compliance"] for d in da]
     ss = [da[d]["steerability"] for d in da]
-    tt = [tbd[d] for d in da if tbd.get(d) is not None]
-    dd_t = [da[d]["default_compliance"] for d in da if tbd.get(d) is not None]
+    sc = [da[d]["rule_scope_discernment"] for d in da]
     print(f"\n  r(domain default, steerability) = {_pearson(dd, ss):+.2f}  "
           f"(headroom would predict a negative slope)")
-    print(f"  r(domain default, transparency) = {_pearson(dd_t, tt):+.2f}")
+    print(f"  r(domain default, scope) = {_pearson(dd, sc):+.2f}")
 
     # 5. pairwise significance (uncertainty reporting; the per-axis CI table is
     # built by axis_ci.py + make_paper_assets)
