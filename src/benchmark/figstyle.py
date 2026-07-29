@@ -8,6 +8,13 @@ per-model color map, and one score / one correlation colormap everywhere.
 
 import matplotlib
 
+# AAAI requires Type 1 or TrueType fonts in the submitted PDF; matplotlib's PDF
+# backend defaults to Type 3, which fails that check. Set at import so every
+# figure script that touches figstyle embeds TrueType (fonttype 42), including
+# the ones that style themselves without calling use_paper_style().
+matplotlib.rcParams["pdf.fonttype"] = 42
+matplotlib.rcParams["ps.fonttype"] = 42
+
 # palette
 INK = "#111827"
 MUTED = "#6b7280"
@@ -81,6 +88,8 @@ def use_paper_style() -> None:
     """Global rcParams for paper figures: large labels, no grid clutter, no
     titles (captions instead), consistent fonts. Call once before plotting."""
     matplotlib.rcParams.update({
+        "pdf.fonttype": 42,      # TrueType, not Type 3 (AAAI font requirement)
+        "ps.fonttype": 42,
         "figure.dpi": 200,
         "savefig.dpi": 200,
         "savefig.bbox": "tight",

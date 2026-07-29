@@ -209,29 +209,23 @@ def plot_compliance_transparency(da: Dict[str, Dict[str, Optional[float]]],
             and tbd.get(d) is not None]
     x = [da[d]["default_compliance"] for d in doms]
     y = [tbd[d] for d in doms]
-    r = _pearson(x, y)
     fig, ax = plt.subplots(figsize=(5.0, 4.0))
     ax.scatter(x, y, s=70, color=FS.BLUE, zorder=3)
-    # the right margin is widened so the tight right-hand cluster can hang two
-    # labels outside the data range; the rest are nudged against collisions,
-    # with thin leader lines wherever a label is displaced far from its dot
+    # the right margin is widened so the tight right-hand cluster can hang its
+    # labels beside the dots; every label sits directly adjacent to its point
     ax.set_xlim(0.735, 1.10)
-    nudge = {"Procurement": (8, -12), "Gov. Services": (-9, 0),
+    nudge = {"Procurement": (8, -2), "Gov. Services": (-9, 0),
              "Finance": (-9, 3), "Moderation": (2, 10),
-             "Export Controls": (-28, 18), "Pharma": (7, 3),
-             "Customer Service": (22, -13), "Privacy": (-9, -4),
+             "Export Controls": (-4, 10), "Pharma": (7, 3),
+             "Customer Service": (7, -10), "Privacy": (-9, -4),
              "AML": (7, -3), "Healthcare": (8, 2), "HR/Hiring": (-9, 0),
              "Advertising": (-9, 5)}
-    leader = {"Export Controls", "Customer Service"}
     for d, xi, yi in zip(doms, x, y):
         s = short_domain(d)
         dx, dy = nudge.get(s, (8, 4))
-        kw = dict(fontsize=11, xytext=(dx, dy), textcoords="offset points",
-                  ha="right" if dx < 0 else "left", va="center", color=FS.INK)
-        if s in leader:
-            kw["arrowprops"] = dict(arrowstyle="-", lw=0.8, color="#9ca3af",
-                                    shrinkA=2, shrinkB=3)
-        ax.annotate(s, (xi, yi), **kw)
+        ax.annotate(s, (xi, yi), fontsize=11, xytext=(dx, dy),
+                    textcoords="offset points",
+                    ha="right" if dx < 0 else "left", va="center", color=FS.INK)
     ax.set_xlabel("Default Compliance", fontsize=13.5)
     ax.set_ylabel("Transparency", fontsize=13.5)
     ax.set_xticks([0.8, 0.9, 1.0])
@@ -239,8 +233,6 @@ def plot_compliance_transparency(da: Dict[str, Dict[str, Optional[float]]],
     ax.grid(True, color=FS.GRID, lw=0.8)
     ax.set_axisbelow(True)
     FS.strip_axes(ax)
-    ax.text(0.02, 0.10, f"$r = {r:+.2f}$", transform=ax.transAxes,
-            fontsize=12.5, va="bottom", color=FS.INK)
     fig.tight_layout()
     fig.savefig(path, bbox_inches="tight")
     fig.savefig(path[:-4] + ".pdf", bbox_inches="tight")
