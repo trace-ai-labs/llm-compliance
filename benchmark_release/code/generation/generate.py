@@ -8,7 +8,6 @@ Usage:
   python -m generation.generate                 # generate everything missing
   python -m generation.generate --only aml_kyc.A moderation.B
   python -m generation.generate --status        # validation report, no calls
-  python -m generation.generate --guard-report  # tables from the shipped log
 """
 
 import argparse
@@ -43,8 +42,7 @@ from generation.registry import (SCENARIOS, SCENARIO_BY_ID,
 SAMPLES_DIR = os.path.join(paths.GENERATION_DIR, "samples")
 COMPONENTS_DIR = os.path.join(paths.GENERATION_DIR, "components")
 RAW_PATH = os.path.join(paths.GENERATION_DIR, "gen_raw.jsonl")
-# New generation runs append review rows here; the shipped review log behind
-# the paper's report and figure is paths.GUARD_LOG.
+# Guard review rows append here as generation runs.
 GUARD_LOG = os.path.join(paths.GENERATION_DIR, "guard_log.jsonl")
 # Worklist of components that exhausted their attempts (or depend on one
 # that did); rerun them with --retry-na.
@@ -55,7 +53,7 @@ NA_LOG = os.path.join(paths.GENERATION_DIR, "na_components.jsonl")
 MAX_CALL_RETRIES = 3
 
 # Each model authors complete packs; the other two review every component.
-DEFAULT_GENERATORS = ["glm", "kimi", "ultra"]
+DEFAULT_GENERATORS = ["glm-5.2", "kimi", "ultra"]
 # The spine (persona/task/rules) is shared by all 13 cells, so it gets a
 # larger attempt budget than the add-ons.
 MAX_GEN_ATTEMPTS = 8        # per spine component; after this, NA placeholder + flag
@@ -188,9 +186,9 @@ def _validate_pressure(obj: dict, seed: ScenarioSeed) -> List[str]:
 
 
 def _validate_t2(obj: dict, seed: ScenarioSeed) -> List[str]:
-    errs = [f"t2: missing/empty {k}" for k in ("t2_pushback", "t2_challenge")
-            if not str(obj.get(k, "")).strip()]
-    return errs
+    if not str(obj.get("t2_pushback", "")).strip():
+        return ["t2: missing/empty t2_pushback"]
+    return []
 
 
 def _validate_guard(obj: dict, seed: ScenarioSeed) -> List[str]:
@@ -297,7 +295,7 @@ PROMPT_ROLES = {
     "rule_context": "SYSTEM: standing account-agnostic policy note appended "
                     "to system_prompt on every cell. The case facts that make "
                     "options decidable live in the USER turn, not here",
-    "hard_directive": "SYSTEM, anti_adversarial mode only: appended after "
+    "hard_directive": "SYSTEM, mandate mode only: appended after "
                       "rule_context (the company-style guardrail mandate)",
     "t1_request": "USER turn 1: {options} is replaced with the option lines "
                   "in generated order",
@@ -314,7 +312,6 @@ PROMPT_ROLES = {
                                  "the requester or tool would present; order "
                                  "never encodes compliance)",
     "t2_pushback": "USER turn 2, sent when the model complied at turn 1",
-    "t2_challenge": "USER turn 2, sent when the model violated at turn 1",
 }
 
 
@@ -335,7 +332,6 @@ def assemble_pack(seed: ScenarioSeed, comps: dict, generator: str) -> dict:
         "rule_context": rules["rule_context"],
         "pressures": {k: comps[f"pressure.{k}"]["text"] for k in SCORED_PRESSURES},
         "t2_pushback": comps["t2"]["t2_pushback"],
-        "t2_challenge": comps["t2"]["t2_challenge"],
         "guard_nonbinding": {k: comps["guard_nonbinding"][k]
                              for k in ("t1_request", "options")},
         "attack_binding": comps["attacks"]["attack_binding"],
@@ -358,7 +354,7 @@ def validate_pack(pack: dict, seed: ScenarioSeed) -> List[str]:
                     f"persona/task/rules failed review, so the pack is empty")
 
     for key in ("system_prompt", "hard_directive", "t1_request",
-                "t2_pushback", "t2_challenge"):
+                "t2_pushback"):
         if not str(pack.get(key, "")).strip():
             errs.append(f"missing/empty {key}")
     if "{options}" not in str(pack.get("t1_request", "")):
@@ -484,7 +480,7 @@ def na_component(component: str, reason: str) -> dict:
                     "system_prompt": "NA", "hard_directive": " NA"},
         "task": {"t1_request": "NA\n\n{options}", "options": na_options},
         "rules": {"rule_context": "\n\nNA"},
-        "t2": {"t2_pushback": "NA", "t2_challenge": "NA"},
+        "t2": {"t2_pushback": "NA"},
         "attacks": {"attack_binding": "\n\nNA", "attack_nonbinding": "\n\nNA"},
     }
     if component.startswith("pressure."):
@@ -596,21 +592,6 @@ def pipeline_flag(sid: str, component: str, role: str, model: str,
     flags.append({"scenario_id": sid, "component": component,
                   "role": role, "model": model, "reason": reason})
     print(f"  [PIPELINE FLAG] {sid}.{component} {role}={model}: {reason}")
-
-
-def load_guard_log(log_path: str = GUARD_LOG) -> List[dict]:
-    rows: List[dict] = []
-    if not os.path.exists(log_path):
-        return rows
-    with open(log_path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if line:
-                try:
-                    rows.append(json.loads(line))
-                except json.JSONDecodeError:
-                    continue
-    return rows
 
 
 def generate(models: List[str], only: Optional[List[str]] = None, workers: int = 8,
@@ -1030,92 +1011,6 @@ def print_stats(raw_path: str = RAW_PATH) -> None:
                   f"{(f'{p / r:.0%}' if r else '-'):>6}")
 
 
-def print_guard_report(log_path: str = paths.GUARD_LOG,
-                       out_dir: str = paths.RESULTS) -> None:
-    """Aggregate a guard review log: pass rates by every dimension, plus
-    guard-pair agreement (raw + Cohen's kappa). Writes guard_report.csv and
-    guard_agreement.csv."""
-    import csv as _csv
-
-    from evaluation.judges import cohen_kappa
-
-    rows = load_guard_log(log_path)
-    if not rows:
-        raise SystemExit(f"{log_path} not found or empty - run generate first")
-    judged = [r for r in rows if r["verdict"] in ("PASS", "FAIL")]
-    print(f"{len(rows)} review rows ({len(judged)} judged, "
-          f"{len(rows) - len(judged)} errors)\n")
-
-    dims = [
-        ("guard_model", lambda r: r["guard_model"]),
-        ("generator_model", lambda r: r["generator_model"]),
-        ("domain", lambda r: r["domain"]),
-        ("scenario", lambda r: r["scenario_id"]),
-        ("component_kind", lambda r: r["component_kind"]),
-        ("pressure_family", lambda r: r["pressure_key"] or "(non-pressure)"),
-        ("component", lambda r: r["component"]),
-        ("generator x guard", lambda r: f"{r['generator_model']} <- {r['guard_model']}"),
-    ]
-    report_rows: List[List] = []
-    for dim_name, keyfn in dims:
-        agg: Dict[str, List[int]] = {}
-        for r in judged:
-            a = agg.setdefault(keyfn(r), [0, 0])
-            a[0] += 1
-            a[1] += r["verdict"] == "PASS"
-        print(f"by {dim_name}")
-        print(f"  {'':<52} {'n':>4} {'pass':>5} {'fail':>5} {'pass%':>6}")
-        for name in sorted(agg):
-            n, p = agg[name]
-            print(f"  {str(name):<52} {n:>4} {p:>5} {n - p:>5} {p / n:>6.0%}")
-            report_rows.append([dim_name, name, n, p, n - p, round(p / n, 4)])
-        print()
-
-    # guard-pair agreement: each judged row carries its co-guard's verdict;
-    # each review pair appears twice (once per guard), so halve the counts
-    pair_labels: Dict[Tuple[str, str], Tuple[List[str], List[str]]] = {}
-    both = agree = 0
-    for r in judged:
-        if r["co_verdict"] not in ("PASS", "FAIL"):
-            continue
-        both += 1
-        agree += r["verdict"] == r["co_verdict"]
-        pair = tuple(sorted([r["guard_model"], r["co_guard_model"]]))
-        a, b = pair_labels.setdefault(pair, ([], []))
-        # order labels by the sorted pair so κ pairing is consistent
-        if r["guard_model"] == pair[0]:
-            a.append(r["verdict"])
-            b.append(r["co_verdict"])
-    agreement_rows: List[List] = []
-    print("guard-pair agreement (both verdicts present; pairs counted once)")
-    print(f"  {'pair':<64} {'n':>4} {'agree%':>7} {'kappa':>6}")
-    for pair, (a, b) in sorted(pair_labels.items()):
-        n = len(a)
-        if not n:
-            continue
-        rate = sum(x == y for x, y in zip(a, b)) / n
-        kappa = cohen_kappa(a, b) if n >= 2 else float("nan")
-        name = " + ".join(pair)
-        print(f"  {name:<64} {n:>4} {rate:>7.0%} {kappa:>6.2f}")
-        agreement_rows.append([name, n, round(rate, 4), round(kappa, 4)])
-    if both:
-        print(f"  overall row-level agreement: {agree / both:.0%} "
-              f"({both} co-judged rows, pairs double-counted)")
-
-    os.makedirs(out_dir, exist_ok=True)
-    report_csv = os.path.join(out_dir, "guard_report.csv")
-    with open(report_csv, "w", newline="", encoding="utf-8") as f:
-        w = _csv.writer(f)
-        w.writerow(["dimension", "value", "reviews", "pass", "fail", "pass_rate"])
-        w.writerows(report_rows)
-    agree_csv = os.path.join(out_dir, "guard_agreement.csv")
-    with open(agree_csv, "w", newline="", encoding="utf-8") as f:
-        w = _csv.writer(f)
-        w.writerow(["guard_pair", "n_reviews", "agreement", "cohen_kappa"])
-        w.writerows(agreement_rows)
-    print(f"\nwrote {report_csv} and {agree_csv}")
-
-
 def print_status(samples_dir: str = SAMPLES_DIR,
                  components_dir: str = COMPONENTS_DIR) -> None:
     status = pack_status(samples_dir)
@@ -1174,12 +1069,6 @@ def main() -> None:
     ap.add_argument("--stats", action="store_true",
                     help="print generation/guard call accounting from the raw "
                          "log and exit (no API calls)")
-    ap.add_argument("--guard-report", action="store_true",
-                    help="aggregate a guard review log into pass-rate tables "
-                         "by every dimension + guard-pair agreement/κ CSVs")
-    ap.add_argument("--log", default=paths.GUARD_LOG, metavar="PATH",
-                    help="guard review log for --guard-report "
-                         "(default: the shipped log)")
     args = ap.parse_args()
 
     if args.status:
@@ -1187,9 +1076,6 @@ def main() -> None:
         return
     if args.stats:
         print_stats()
-        return
-    if args.guard_report:
-        print_guard_report(args.log)
         return
     if args.only:
         unknown = [s for s in args.only if s not in SCENARIO_BY_ID]

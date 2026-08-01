@@ -1,15 +1,14 @@
-"""Run models over the frozen item set. Paper Section 3.1, "Evaluation protocol".
+"""Run models over the frozen sample set. Paper Section 3.1, "Evaluation protocol".
 
-One trial = (item, model, rep, mode): send system(+mode suffix) + turn 1,
+One trial = (sample, model, rep): send the sample's system prompt + turn 1,
 extract the chosen option with the LLM extractor, force once if the reply
-committed to no listed option, then - only if the final T1 outcome is
-comply/overcomply and the item carries a pushback message - send the pushback
-turn with the full history and resolve it the same way. A T1 violation is
-terminal. Rows append to {trials_dir}/{model}.jsonl and are skipped on rerun
-(resume by trial_id).
+committed to no listed option, then - only if the final turn-1 outcome is
+comply and the sample carries a pushback message - send the pushback turn
+with the full history and resolve it the same way. A turn-1 violation is
+terminal. Rows append to {trials_dir}/{model}.jsonl and are skipped on rerun.
 
 Usage:
-  python -m evaluation.runner --models glm kimi --reps 3
+  python -m evaluation.runner --models glm-5.2 kimi --reps 3
   python -m evaluation.runner --models gemini --groups pressure --modes base
   python -m evaluation.runner --models gemini --dry-run
 """
@@ -25,11 +24,11 @@ from typing import Dict, List, Optional, Tuple
 import paths
 from evaluation.batch import (BatchRequest, DEFAULT_EXTRACT_MODEL, _RateLimiter,
                               call_one, get_api_key, resolve_model)
-from evaluation.judges import (FORCE_MSG, OUTCOME_JUDGE_SYS, mode_suffix,
+from evaluation.judges import (FORCE_MSG, OUTCOME_JUDGE_SYS,
                                outcome_judge_request, parse_outcome_judgment,
                                prompt_sha, resolve_outcome)
 
-MODES = ("base", "anti_adversarial")   # system-prompt modes
+MODES = ("base", "mandate")
 HELD = ("comply", "overcomply")
 
 # Forcing follow-up: generous max_tokens so a reasoning model is not truncated
@@ -40,16 +39,16 @@ FORCE_TEMP = 1.0
 # Per-model output budgets used for the paper's runs (appendix, run
 # configuration); --max-tokens overrides when explicitly passed.
 OUTPUT_BUDGET: Dict[str, int] = {
-    "deepseek-ai/DeepSeek-V4-Pro":   8192,
-    "openai/gpt-oss-120b":           8192,
-    "nvidia/Nemotron-120B-A12B":     8192,
-    "Seed-OSS-36B-Instruct":         8192,
-    "Qwen3.6 27B":                   8192,
-    "MiniMaxAI/MiniMax-M2.5":        8192,
-    "google/gemini-3-flash-preview": 8192,
-    "gpt-5.6-luna":                  8192,
-    "x-ai/grok-4.3":                 2048,
-    "claude-haiku-4-5":              2048,
+    "deepseek/deepseek-v4-pro":       8192,
+    "openai/gpt-oss-120b":            8192,
+    "nvidia/nemotron-3-super":        8192,
+    "bytedance/seed-oss-36b-instruct": 8192,
+    "qwen/qwen3.6-27b":               8192,
+    "minimax/minimax-m2.5":           8192,
+    "google/gemini-3-flash-preview":  8192,
+    "openai/gpt-5.6-luna":            8192,
+    "x-ai/grok-4.3":                  2048,
+    "anthropic/claude-haiku-4.5":     2048,
 }
 DEFAULT_MAX_TOKENS = 1024
 
@@ -58,8 +57,8 @@ def safe_name(model: str) -> str:
     return model.replace("/", "_").replace(":", "_")
 
 
-def trial_id(item_id: str, mode: str, rep: int) -> str:
-    return f"{item_id}|{mode}|r{rep}"
+def trial_id(sample_id: str, rep: int) -> str:
+    return f"{sample_id}.{rep}"
 
 
 def _load_done(path: str) -> set:
@@ -85,13 +84,13 @@ _EXTRACT_LIMITER: Optional["_RateLimiter"] = None
 _JUDGE_MAX_TRIES = 3
 
 
-def _extract(tid: str, turn: int, response: str, item: dict, judge_model: str,
+def _extract(tid: str, turn: int, response: str, sample: dict, judge_model: str,
              api_key: str, context: Optional[Tuple[str, str]] = None
              ) -> Tuple[Optional[str], str]:
     """Extract the option a reply chose. `context` = (earlier reply, follow-up
     message) lets the extractor resolve replies like "I'll stick with it".
     Returns (choice, "llm") or (None, "llm_error") after _JUDGE_MAX_TRIES."""
-    names = [o["name"] for o in item["options"]]
+    names = [o["name"] for o in sample["options"]]
     prior, followup = context if context else (None, None)
     req = outcome_judge_request(tid, response, names, judge_model, turn,
                                 turn1_response=prior, followup=followup)
@@ -104,7 +103,7 @@ def _extract(tid: str, turn: int, response: str, item: dict, judge_model: str,
     return None, "llm_error"
 
 
-def resolve_turn(tid: str, turn: int, history: List[dict], item: dict,
+def resolve_turn(tid: str, turn: int, history: List[dict], sample: dict,
                  model: str, judge_model: str, api_key: str, max_tokens: int,
                  temperature: float, limiter: Optional["_RateLimiter"],
                  judge_context: Optional[Tuple[str, str]] = None) -> dict:
@@ -119,9 +118,9 @@ def resolve_turn(tid: str, turn: int, history: List[dict], item: dict,
     if not res.ok:
         raise RuntimeError(f"T{turn} failed: {res.error}")
     response = res.content
-    choice, judge = _extract(tid, turn, response, item, judge_model, api_key,
+    choice, judge = _extract(tid, turn, response, sample, judge_model, api_key,
                              context=judge_context)
-    outcome = resolve_outcome(choice, item["gold"])
+    outcome = resolve_outcome(choice, sample["gold"])
     forced, force_response, force_choice = False, None, None
     if outcome == "unclear":
         if limiter:
@@ -134,10 +133,10 @@ def resolve_turn(tid: str, turn: int, history: List[dict], item: dict,
             api_key)
         if fres.ok:
             forced, force_response = True, fres.content
-            force_choice, _ = _extract(tid, turn, force_response, item,
+            force_choice, _ = _extract(tid, turn, force_response, sample,
                                        judge_model, api_key,
                                        context=(response, FORCE_MSG))
-            foutcome = resolve_outcome(force_choice, item["gold"])
+            foutcome = resolve_outcome(force_choice, sample["gold"])
             if foutcome != "unclear":
                 choice, outcome, judge = force_choice, foutcome, "llm_forced"
             else:
@@ -147,23 +146,22 @@ def resolve_turn(tid: str, turn: int, history: List[dict], item: dict,
             "force_choice": force_choice}
 
 
-def run_trial(item: dict, model: str, mode: str, rep: int, judge_model: str,
+def run_trial(sample: dict, model: str, rep: int, judge_model: str,
               api_key: str, max_tokens: int, temperature: float,
               limiter: Optional["_RateLimiter"] = None,
               do_t2: bool = True) -> dict:
-    tid = trial_id(item["item_id"], mode, rep)
-    system = item["system_prompt"] + mode_suffix(item, mode)
-    history = [{"role": "system", "content": system},
-               {"role": "user", "content": item["turn1"]}]
-    t1 = resolve_turn(tid, 1, history, item, model, judge_model, api_key,
+    tid = trial_id(sample["id"], rep)
+    history = [{"role": "system", "content": sample["system_prompt"]},
+               {"role": "user", "content": sample["turn1"]}]
+    t1 = resolve_turn(tid, 1, history, sample, model, judge_model, api_key,
                       max_tokens, temperature, limiter)
 
     row = {
-        "trial_id": tid, "item_id": item["item_id"],
-        "scenario_id": item["scenario_id"], "domain": item["domain"],
-        "group": item["group"], "binds": item["binds"],
-        "pressure": item["pressure"],
-        "model": model, "mode": mode, "rep": rep,
+        "trial_id": tid, "sample": sample["id"], "item": sample["item"],
+        "scenario": sample["scenario"], "domain": sample["domain"],
+        "group": sample["group"], "binds": sample["binds"],
+        "pressure": sample["pressure"],
+        "model": model, "mode": sample["mode"], "rep": rep,
         "t1_response": t1["response"], "t1_choice": t1["choice"],
         "t1_outcome": t1["outcome"], "t1_judge": t1["judge"],
         "t1_forced": t1["forced"], "t1_force_response": t1["force_response"],
@@ -175,13 +173,13 @@ def run_trial(item: dict, model: str, mode: str, rep: int, judge_model: str,
         "judge_prompt_sha": prompt_sha(OUTCOME_JUDGE_SYS), "ts": time.time(),
     }
 
-    t2_message = item.get("t2_if_compliant")
+    t2_message = sample.get("pushback")
     if not do_t2 or t1["outcome"] not in HELD or not t2_message:
         return row
     row["t2_script"] = "pushback"
     row["t2_message"] = t2_message
 
-    # The pushback replies to the full history; a forced-comply T1 includes
+    # The pushback replies to the full history; a forced-comply turn 1 includes
     # its forcing exchange so the committed pick is on the record.
     history += [{"role": "assistant", "content": t1["response"]}]
     if t1["forced"] and t1["force_response"]:
@@ -189,7 +187,7 @@ def run_trial(item: dict, model: str, mode: str, rep: int, judge_model: str,
                     {"role": "assistant", "content": t1["force_response"]}]
     history += [{"role": "user", "content": t2_message}]
     committed = t1["force_response"] if t1["forced"] else t1["response"]
-    t2 = resolve_turn(tid, 2, history, item, model, judge_model, api_key,
+    t2 = resolve_turn(tid, 2, history, sample, model, judge_model, api_key,
                       max_tokens, temperature, limiter,
                       judge_context=(committed, t2_message))
     row.update(t2_response=t2["response"], t2_choice=t2["choice"],
@@ -199,20 +197,18 @@ def run_trial(item: dict, model: str, mode: str, rep: int, judge_model: str,
     return row
 
 
-def grid_jobs(items: List[dict], modes: List[str], reps: int,
-              done: set) -> List[Tuple[dict, str, int]]:
-    return [(item, mode, rep)
-            for item in items for mode in modes for rep in range(reps)
-            if trial_id(item["item_id"], mode, rep) not in done]
+def grid_jobs(samples: List[dict], reps: int, done: set) -> List[Tuple[dict, int]]:
+    return [(s, rep) for s in samples for rep in range(1, reps + 1)
+            if trial_id(s["id"], rep) not in done]
 
 
-def run_model(model: str, items: List[dict], modes: List[str], reps: int,
+def run_model(model: str, samples: List[dict], reps: int,
               judge_model: str, workers: int, max_tokens: Optional[int],
               temperature: float, trials_dir: str = paths.NEW_TRIALS_DIR,
               dry_run: bool = False, rpm: int = 0) -> None:
     out_path = os.path.join(trials_dir, f"{safe_name(model)}.jsonl")
     done = _load_done(out_path)
-    jobs = grid_jobs(items, modes, reps, done)
+    jobs = grid_jobs(samples, reps, done)
     budget = max_tokens or OUTPUT_BUDGET.get(model, DEFAULT_MAX_TOKENS)
     print(f"{model}: {len(jobs)} trials to run "
           f"({len(done)} already done, max_tokens={budget}) -> {out_path}")
@@ -225,17 +221,16 @@ def run_model(model: str, items: List[dict], modes: List[str], reps: int,
     n_done = 0
     limiter = _RateLimiter(rpm)   # caps calls to this model across all workers
 
-    def _work(item: dict, mode: str, rep: int) -> dict:
-        return run_trial(item, model, mode, rep, judge_model, api_key,
+    def _work(sample: dict, rep: int) -> dict:
+        return run_trial(sample, model, rep, judge_model, api_key,
                          budget, temperature, limiter)
 
     with ThreadPoolExecutor(max_workers=workers) as ex:
-        futures = {ex.submit(_work, it, mode, rep): (it, mode, rep)
-                   for it, mode, rep in jobs}
+        futures = {ex.submit(_work, s, rep): (s, rep) for s, rep in jobs}
         try:
             for fut in as_completed(futures):
-                it, mode, rep = futures[fut]
-                tid = trial_id(it["item_id"], mode, rep)
+                s, rep = futures[fut]
+                tid = trial_id(s["id"], rep)
                 try:
                     row = fut.result()
                 except Exception as e:
@@ -255,29 +250,32 @@ def run_model(model: str, items: List[dict], modes: List[str], reps: int,
             raise SystemExit(1)
 
 
-def filter_items(items: List[dict], groups: Optional[List[str]],
-                 scenarios: Optional[List[str]]) -> List[dict]:
-    out = items
+def filter_samples(samples: List[dict], modes: Optional[List[str]],
+                   groups: Optional[List[str]],
+                   scenarios: Optional[List[str]]) -> List[dict]:
+    out = samples
+    if modes:
+        out = [s for s in out if s["mode"] in set(modes)]
     if groups:
-        out = [it for it in out if it["group"] in set(groups)]
+        out = [s for s in out if s["group"] in set(groups)]
     if scenarios:
-        out = [it for it in out if it["scenario_id"] in set(scenarios)]
+        out = [s for s in out if s["scenario"] in set(scenarios)]
     return out
 
 
 def main() -> None:
-    from generation.items import load_items
+    from generation.items import load_samples
 
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--models", nargs="+", required=True,
-                    help="model aliases or full model ids")
-    ap.add_argument("--items", default=paths.ITEMS)
+                    help="model aliases or full OpenRouter slugs")
+    ap.add_argument("--samples", default=paths.PACT)
     ap.add_argument("--reps", type=int, default=3,
-                    help="independent runs per (item, mode)")
-    ap.add_argument("--modes", nargs="+", default=list(MODES),
-                    choices=list(MODES), help="system-prompt modes to run")
+                    help="independent runs per sample")
+    ap.add_argument("--modes", nargs="+", default=None, choices=list(MODES),
+                    help="restrict to one system-prompt mode")
     ap.add_argument("--groups", nargs="*", default=None,
-                    help="restrict to item groups (e.g. neutral pressure)")
+                    help="restrict to sample groups (e.g. neutral pressure)")
     ap.add_argument("--scenarios", nargs="*", default=None)
     ap.add_argument("--judge-model", default=DEFAULT_EXTRACT_MODEL,
                     type=resolve_model, help="the LLM outcome extractor")
@@ -296,10 +294,11 @@ def main() -> None:
 
     global _EXTRACT_LIMITER
     _EXTRACT_LIMITER = _RateLimiter(args.extract_rpm)
-    items = filter_items(load_items(args.items), args.groups, args.scenarios)
-    print(f"{len(items)} items after filters")
+    samples = filter_samples(load_samples(args.samples), args.modes,
+                             args.groups, args.scenarios)
+    print(f"{len(samples)} samples after filters")
     for m in args.models:
-        run_model(resolve_model(m), items, args.modes, args.reps,
+        run_model(resolve_model(m), samples, args.reps,
                   args.judge_model, args.workers, args.max_tokens,
                   args.temperature, args.trials_dir, args.dry_run, args.rpm)
 

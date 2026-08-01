@@ -1,6 +1,6 @@
 """Domain and pressure-family breakouts (Section 4, 'Compliance varies across
 pressures and domains' + appendix 'Difficulty by Domain and Pressure').
-Writes results/dist_*.csv and the scope_default figure.
+Prints the tables and writes results/dist_*.csv.
 
 Usage: python -m analysis.distributions
 """
@@ -11,7 +11,6 @@ from collections import defaultdict
 from typing import Dict, List, Optional, Sequence
 
 import paths
-from analysis import figstyle as FS
 from analysis import metrics as M
 from evaluation.judges import load_trials, load_transparency_votes
 from generation.registry import SCORED_PRESSURES
@@ -20,7 +19,7 @@ from generation.registry import SCORED_PRESSURES
 # separately (transparency_by_domain) because per-model per-domain violation
 # counts are too thin to average.
 AXES = [
-    ("default_compliance", lambda cs, m: M.default_compliance(cs, m)),
+    ("default_compliance", M.default_compliance),
     ("pressure_resistance", M.pressure_resistance),
     ("pushback_resistance", lambda cs, m: M.pushback_resistance(cs, m, []).value),
     ("steerability", lambda cs, m: M.steerability(cs, m).net),
@@ -33,8 +32,7 @@ def _pooled_rate(cells: Sequence[M.Cell], attr: str) -> Optional[float]:
     attr is 't1' or 't2_pushback'."""
     comply = decided = 0
     for c in cells:
-        outs = getattr(c, attr)
-        for o in outs:
+        for o in getattr(c, attr):
             if o == "unclear":
                 continue
             decided += 1
@@ -45,8 +43,8 @@ def _pooled_rate(cells: Sequence[M.Cell], attr: str) -> Optional[float]:
 def _pooled_recovery(base: Sequence[M.Cell], directive: Sequence[M.Cell]
                      ) -> Optional[float]:
     """Signed steerability recovery pooled over a cell group, matched by item."""
-    b = {c.item_id: c.rate for c in base if c.rate is not None}
-    d = {c.item_id: c.rate for c in directive if c.rate is not None}
+    b = {c.item: c.rate for c in base if c.rate is not None}
+    d = {c.item: c.rate for c in directive if c.rate is not None}
     gain = mass = 0.0
     for iid, br in b.items():
         if br >= 1.0 or iid not in d:
@@ -76,7 +74,8 @@ def transparency_by_domain(trials: List[dict], models: List[str]
     return {dom: sum(s) / len(s) if s else None for dom, s in shares.items()}
 
 
-def domain_axis_table(cells: Dict, models: List[str]) -> Dict[str, Dict[str, Optional[float]]]:
+def domain_axis_table(cells: Dict, models: List[str]
+                      ) -> Dict[str, Dict[str, Optional[float]]]:
     """domain -> axis -> panel mean of the per-model per-domain axis value."""
     domains = sorted({c.domain for c in cells.values()})
     out: Dict[str, Dict[str, Optional[float]]] = {}
@@ -94,13 +93,12 @@ def domain_axis_table(cells: Dict, models: List[str]) -> Dict[str, Dict[str, Opt
 def pressure_table(cells: Dict, models: List[str]
                    ) -> Dict[str, Dict[str, Optional[float]]]:
     """pressure family -> {t1 comply, t2 hold, steerability}, panel-pooled."""
-    fams = list(SCORED_PRESSURES)
     out: Dict[str, Dict[str, Optional[float]]] = {}
-    for fam in fams:
+    for fam in SCORED_PRESSURES:
         base_p = [c for (m, a, _), c in cells.items()
                   if a == "base" and c.pressure == fam and m in models]
         dir_p = [c for (m, a, _), c in cells.items()
-                 if a == "anti_adversarial" and c.pressure == fam and m in models]
+                 if a == "mandate" and c.pressure == fam and m in models]
         out[fam] = {
             "t1_comply": _pooled_rate(base_p, "t1"),
             "t2_hold": _pooled_rate(base_p, "t2_pushback"),
@@ -118,7 +116,8 @@ def domain_pressure_grid(cells: Dict, models: List[str]):
         row = []
         for fam in fams:
             cs = [c for (m, a, _), c in cells.items()
-                  if a == "base" and c.domain == dom and c.pressure == fam and m in models]
+                  if a == "base" and c.domain == dom and c.pressure == fam
+                  and m in models]
             row.append(_pooled_rate(cs, "t1"))
         grid.append(row)
     return domains, fams, grid
@@ -202,20 +201,16 @@ def main() -> None:
                      (c.group == "pressure" and c.pressure == want_pressure))]
         return sum(vals) / len(vals) if vals else None
 
-    dom_keys = [d for d in sorted({c.domain for (_, a, _), c in cells.items()
-                                   if a == "base"})]
     _write_csv(os.path.join(paths.RESULTS, "dist_model_domain.csv"),
-               ["model"] + dom_keys,
-               [[m] + [_cell_mean(m, want_domain=d) for d in dom_keys]
+               ["model"] + domains,
+               [[m] + [_cell_mean(m, want_domain=d) for d in domains]
                 for m in models])
     _write_csv(os.path.join(paths.RESULTS, "dist_model_pressure.csv"),
                ["model"] + list(fams),
                [[m] + [_cell_mean(m, want_pressure=f) for f in fams]
                 for m in models])
 
-    # 4. scope-vs-default scatter + the domain-level correlations the prose quotes
-    from analysis import figures
-    figures.scope_default(da)
+    # 4. the domain-level correlations the prose quotes
     dd = [da[d]["default_compliance"] for d in da]
     ss = [da[d]["steerability"] for d in da]
     sc = [da[d]["rule_scope_discernment"] for d in da]
@@ -230,15 +225,14 @@ def main() -> None:
         pct = 100 * sig["n_sig"] / sig["n_pairs"] if sig["n_pairs"] else 0.0
         print(f"\n  pairwise: {sig['n_sig']}/{sig['n_pairs']} ({pct:.1f}%) "
               f"significant at BH p<0.05; "
-              f"top cluster (tied with {FS.short(sig['top'])}): "
-              f"{len(sig['cluster'])} models -> {[FS.short(m) for m in sig['cluster']]}")
+              f"top cluster (tied with {sig['top']}): "
+              f"{len(sig['cluster'])} models -> {sig['cluster']}")
 
     print("\n== domain x axis (panel mean) ==")
     for dom in sorted(da, key=lambda d: (da[d]["default_compliance"] or 9)):
         r = da[dom]
         tv = tbd.get(dom)
-        # thin-space labels break cp1252 consoles; plain space for the printout
-        print(f"  {FS.domain_label(dom).replace(chr(0x2009), ' '):14s} " +
+        print(f"  {dom:22s} " +
               " ".join(f"{a[:4]}={r[a]:.2f}" if r[a] is not None else f"{a[:4]}=n/a"
                        for a in axis_names) +
               (f" tran={tv:.3f}" if tv is not None else " tran=n/a"))
@@ -247,7 +241,7 @@ def main() -> None:
         r = pt[p]
         print(f"  {p:24s} t1={r['t1_comply']:.3f} t2={r['t2_hold']:.3f} "
               f"steer={r['steerability']:.3f}")
-    flat = [(FS.domain_label(d), f.replace('_', ' '), grid[i][j])
+    flat = [(d, f, grid[i][j])
             for i, d in enumerate(domains) for j, f in enumerate(fams)
             if grid[i][j] is not None]
     lo = min(flat, key=lambda t: t[2])

@@ -1,12 +1,11 @@
 """Batched LLM calls with on-disk resume - the pipeline's only API layer.
 
-Every call goes through the `openai` SDK. Open-weights models are served by
-whatever OpenAI-compatible endpoint BENCH_BASE_URL names; the closed models in
-EXTERNAL are reached at their own providers. Results append to a JSONL keyed
-by request id, and rerunning the same batch skips completed ids.
+Every call is an OpenAI-SDK chat completion against OpenRouter
+(OPENROUTER_API_KEY). Results append to a JSONL keyed by request id;
+rerunning the same batch skips completed ids.
 
 CLI (smoke test):
-  python -m evaluation.batch --model glm --prompt "say hi"
+  python -m evaluation.batch --model glm-5.2 --prompt "say hi"
 """
 
 from __future__ import annotations
@@ -25,99 +24,43 @@ from openai import (APIConnectionError, APITimeoutError, InternalServerError,
 
 import paths
 
-try:  # optional; environment variables may already be set
+try:  # optional; the key may already be in the environment
     from dotenv import load_dotenv
     load_dotenv(os.path.join(os.getcwd(), ".env"))
 except ImportError:
     pass
 
-BASE_URL_ENV = "BENCH_BASE_URL"
-API_KEY_ENV = os.environ.get("BENCH_API_KEY_ENV", "BENCH_API_KEY")
+BASE_URL = "https://openrouter.ai/api/v1"
+API_KEY_ENV = "OPENROUTER_API_KEY"
 
 # Transient failures worth retrying. Auth/validation errors fail fast.
 RETRYABLE = (RateLimitError, APITimeoutError, APIConnectionError,
              InternalServerError)
 
-# Short aliases for CLIs; any full model id the endpoint serves passes
-# through unchanged.
+# Short aliases for CLIs; any full OpenRouter slug passes through unchanged.
 MODEL_REGISTRY: Dict[str, str] = {
-    "deepseek": "deepseek-ai/DeepSeek-V4-Pro",
-    "ds":       "deepseek-ai/DeepSeek-V4-Pro",
-    "glm":      "zai-org/GLM-5.2",
-    "glm5.2":   "zai-org/GLM-5.2",
-    "glm5":     "zai-org/GLM-5",
-    "glm4.7":   "zai-org/GLM-4.7",
-    "kimi":     "moonshotai/Kimi-K2.6",
-    "k2.6":     "moonshotai/Kimi-K2.6",
-    "kimi-code": "moonshotai/Kimi-K2.7-Code",
-    "inkling":  "thinkingmachines/inkling",
-    "gptoss":   "openai/gpt-oss-120b",
-    "gpt-oss":  "openai/gpt-oss-120b",
-    "nemotron": "nvidia/Nemotron-120B-A12B",
-    "super":    "nvidia/Nemotron-120B-A12B",
-    "ultra":    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
-    "minimax":  "MiniMaxAI/MiniMax-M2.5",
-    "mistral":  "mistral-7b-instruct",
-    "llama":    "llama-3.3-70b-instruct",
-    "llama70b": "llama-3.3-70b-instruct",
-    "llama8b":  "llama-3.1-8b-instruct",
-    "qwen":     "qwen3.5-35b-a3b",
-    "qwen35":   "qwen3.5-35b-a3b",
-    "qwen36":   "Qwen3.6 27B",
-    "qwen3.6":  "Qwen3.6 27B",
-    "gemma":    "gemma-4-26b",
-    "seedoss":  "Seed-OSS-36B-Instruct",
-    "seed-oss": "Seed-OSS-36B-Instruct",
-    # Closed-weight models (see EXTERNAL below).
-    "haiku":        "claude-haiku-4-5",
-    "claude-haiku": "claude-haiku-4-5",
-    "luna":         "gpt-5.6-luna",
-    "gpt-luna":     "gpt-5.6-luna",
-    "grok":         "x-ai/grok-4.3",
-    "grok4.3":      "x-ai/grok-4.3",
-    "gemini":       "google/gemini-3-flash-preview",
-    "gemini-flash": "google/gemini-3-flash-preview",
-    "gemini3":      "google/gemini-3-flash-preview",
-}
-
-
-@dataclass
-class ProviderSpec:
-    """Connection details and request quirks for a model reachable only at
-    its own provider."""
-    base_url: str
-    key_env: str
-    served_model: str                          # slug sent as the "model" field
-    extra_body: Dict[str, Any] = field(default_factory=dict)
-    use_max_completion_tokens: bool = False    # OpenAI reasoning models reject max_tokens
-    send_temperature: bool = True              # False = omit it (default-only models)
-    timeout: float = 300.0
-
-
-# Closed-weight models under evaluation: `call_one` routes them to their own
-# provider; every other model goes to the shared BENCH_BASE_URL endpoint.
-EXTERNAL: Dict[str, "ProviderSpec"] = {
-    "claude-haiku-4-5": ProviderSpec(
-        base_url="https://api.anthropic.com/v1/",
-        key_env="ANTHROPIC_API_KEY",
-        served_model="claude-haiku-4-5-20251001"),
-    # requires max_completion_tokens and the default temperature only
-    "gpt-5.6-luna": ProviderSpec(
-        base_url="https://api.openai.com/v1",
-        key_env="OPENAI_API_KEY",
-        served_model="gpt-5.6-luna",
-        use_max_completion_tokens=True,
-        send_temperature=False),
-    # run with reasoning disabled
-    "x-ai/grok-4.3": ProviderSpec(
-        base_url="https://openrouter.ai/api/v1",
-        key_env="OPENROUTER_API_KEY",
-        served_model="x-ai/grok-4.3",
-        extra_body={"reasoning": {"enabled": False}}),
-    "google/gemini-3-flash-preview": ProviderSpec(
-        base_url="https://openrouter.ai/api/v1",
-        key_env="OPENROUTER_API_KEY",
-        served_model="google/gemini-3-flash-preview"),
+    "mistral":    "mistralai/mistral-7b-instruct",
+    "llama8b":    "meta-llama/llama-3.1-8b-instruct",
+    "llama70b":   "meta-llama/llama-3.3-70b-instruct",
+    "seed-oss":   "bytedance/seed-oss-36b-instruct",
+    "gpt-oss":    "openai/gpt-oss-120b",
+    "glm-4.7":    "z-ai/glm-4.7",
+    "minimax":    "minimax/minimax-m2.5",
+    "qwen3.5":    "qwen/qwen3.5-35b-a3b",
+    "glm-5":      "z-ai/glm-5",
+    "gemma":      "google/gemma-4-26b",
+    "super":      "nvidia/nemotron-3-super",
+    "qwen3.6":    "qwen/qwen3.6-27b",
+    "deepseek":   "deepseek/deepseek-v4-pro",
+    "kimi":       "moonshotai/kimi-k2.6",
+    "kimi-code":  "moonshotai/kimi-k2.7-code",
+    "ultra":      "nvidia/nemotron-3-ultra",
+    "glm-5.2":    "z-ai/glm-5.2",
+    "inkling":    "thinkingmachines/inkling",
+    "haiku":      "anthropic/claude-haiku-4.5",
+    "gemini":     "google/gemini-3-flash-preview",
+    "grok":       "x-ai/grok-4.3",
+    "luna":       "openai/gpt-5.6-luna",
 }
 
 # The outcome extractor (a reasoning model: callers keep its max_tokens
@@ -126,23 +69,12 @@ DEFAULT_EXTRACT_MODEL = "openai/gpt-oss-120b"
 
 # The taxonomy judge ensemble (the three scenario-generator models), applied
 # leave-one-out: a model never judges its own response.
-TAXONOMY_TRIO = ("zai-org/GLM-5.2", "moonshotai/Kimi-K2.6",
-                 "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B")
+TAXONOMY_TRIO = ("z-ai/glm-5.2", "moonshotai/kimi-k2.6",
+                 "nvidia/nemotron-3-ultra")
 
 
 def resolve_model(alias_or_id: str) -> str:
     return MODEL_REGISTRY.get(alias_or_id, alias_or_id)
-
-
-def get_base_url() -> str:
-    url = os.environ.get(BASE_URL_ENV)
-    if not url:
-        raise RuntimeError(
-            f"Set {BASE_URL_ENV} to an OpenAI-compatible chat-completions "
-            f"endpoint that serves the open-weights models, e.g. "
-            f"https://your-provider.example/v1 (any provider works; the "
-            f"pipeline only needs /chat/completions)")
-    return url
 
 
 def get_api_key() -> str:
@@ -153,20 +85,15 @@ def get_api_key() -> str:
 
 
 _client_lock = threading.Lock()
-_clients: Dict[str, OpenAI] = {}
+_client: Optional[OpenAI] = None
 
 
-def _get_client(api_key: str, base_url: Optional[str] = None) -> OpenAI:
-    """One SDK client per (base_url, key) pair (thread-safe; shared connection
-    pool). base_url defaults to the shared BENCH_BASE_URL endpoint; EXTERNAL
-    providers pass their own."""
-    burl = base_url or get_base_url()
-    ck = f"{burl}||{api_key}"
+def _get_client(api_key: str) -> OpenAI:
+    global _client
     with _client_lock:
-        client = _clients.get(ck)
-        if client is None:
-            client = _clients[ck] = OpenAI(base_url=burl, api_key=api_key)
-        return client
+        if _client is None:
+            _client = OpenAI(base_url=BASE_URL, api_key=api_key)
+        return _client
 
 
 @dataclass
@@ -211,60 +138,10 @@ class _RateLimiter:
             time.sleep(delay)
 
 
-def _call_external(req: BatchRequest, max_retries: int, timeout: float) -> BatchResult:
-    """Call a model at its own provider (EXTERNAL[req.model]), applying the
-    provider's request quirks. Same retry/backoff contract as call_one."""
-    spec = EXTERNAL[req.model]
-    key = os.environ.get(spec.key_env)
-    if not key:
-        return BatchResult(req.id, False, "",
-                           f"model {req.model} needs {spec.key_env} in .env",
-                           req.model, req.meta)
-    client = _get_client(key, spec.base_url)
-    to = max(timeout, spec.timeout)
-    kwargs: Dict[str, Any] = {"model": spec.served_model,
-                              "messages": req.messages, "timeout": to}
-    if spec.use_max_completion_tokens:
-        kwargs["max_completion_tokens"] = req.max_tokens
-    else:
-        kwargs["max_tokens"] = req.max_tokens
-    if spec.send_temperature:
-        kwargs["temperature"] = req.temperature
-    if spec.extra_body:
-        kwargs["extra_body"] = spec.extra_body
-    last_err = ""
-    for attempt in range(max_retries):
-        try:
-            resp = client.chat.completions.create(**kwargs)
-            choice = resp.choices[0]
-            content = choice.message.content
-            if content is None or not str(content).strip():
-                last_err = f"empty completion (finish_reason={choice.finish_reason})"
-                time.sleep(2.0 * (attempt + 1))
-                continue
-            return BatchResult(req.id, True, str(content), "", req.model, req.meta)
-        except RateLimitError as e:
-            last_err = f"rate limited: {e}"
-            time.sleep(min(90.0, 10.0 * (2 ** attempt)))
-        except RETRYABLE as e:
-            last_err = f"{type(e).__name__}: {e}"
-            time.sleep(min(60.0, 5.0 * (2 ** attempt)))
-        except Exception as e:   # auth, bad request, model not found - no retry
-            return BatchResult(req.id, False, "",
-                               f"non-retryable {type(e).__name__}: {e}",
-                               req.model, req.meta)
-    return BatchResult(req.id, False, "",
-                       f"failed after {max_retries} attempts: {last_err}",
-                       req.model, req.meta)
-
-
 def call_one(req: BatchRequest, api_key: str, max_retries: int = 5,
-             timeout: float = 180.0) -> BatchResult:
+             timeout: float = 300.0) -> BatchResult:
     """One request with exponential-backoff retries on transient failures;
-    fails fast on auth/validation errors; never raises. EXTERNAL models route
-    to their own provider; everything else uses the shared endpoint + api_key."""
-    if req.model in EXTERNAL:
-        return _call_external(req, max_retries, timeout)
+    fails fast on auth/validation errors; never raises."""
     client = _get_client(api_key)
     last_err = ""
     for attempt in range(max_retries):
@@ -286,7 +163,7 @@ def call_one(req: BatchRequest, api_key: str, max_retries: int = 5,
             return BatchResult(req.id, True, str(content), "", req.model, req.meta)
         except RateLimitError as e:
             last_err = f"rate limited: {e}"
-            time.sleep(min(60.0, 10.0 * (2 ** attempt)))
+            time.sleep(min(90.0, 10.0 * (2 ** attempt)))
         except RETRYABLE as e:
             last_err = f"{type(e).__name__}: {e}"
             time.sleep(min(60.0, 5.0 * (2 ** attempt)))
@@ -379,7 +256,7 @@ def run_batch(requests: List[BatchRequest], out_path: str,
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("--model", default="glm", type=resolve_model)
+    ap.add_argument("--model", default="glm-5.2", type=resolve_model)
     ap.add_argument("--prompt", required=True)
     ap.add_argument("-o", "--output",
                     default=os.path.join(paths.RESULTS, "batch_smoke.jsonl"))

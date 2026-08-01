@@ -160,6 +160,15 @@ MODEL_META = {
 }
 
 
+# Models evaluated as explicit instruct-tuned variants (italicized in the
+# roster). Gemma and Qwen3.5 serve instruction-tuned checkpoints without
+# "instruct" in the slug; the later unified releases have no base/instruct split.
+INSTRUCT_VARIANTS = {
+    "mistral-7b-instruct", "llama-3.1-8b-instruct", "llama-3.3-70b-instruct",
+    "Seed-OSS-36B-Instruct", "gemma-4-26b", "qwen3.5-35b-a3b",
+}
+
+
 def build_model_table(rows: List[dict]) -> str:
     """Single-column roster of the evaluated models: provider, size, release,
     a one-line note, and a citation. Open-weights first then closed (bold), each
@@ -183,7 +192,7 @@ def build_model_table(rows: List[dict]) -> str:
     ]
     for m, meta in items:
         name = FS.DISPLAY_NAME.get(m, m.split("/")[-1]).replace("&", r"\&")
-        if "instruct" in m.lower():
+        if m in INSTRUCT_VARIANTS:
             name = f"\\textit{{{name}}}"
         if not meta["open"]:
             name = f"\\textbf{{{name}}}"

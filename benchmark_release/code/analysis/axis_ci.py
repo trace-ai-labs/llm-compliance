@@ -1,4 +1,4 @@
-"""Item-cluster bootstrap 95% CIs for the six per-model axes (appendix
+﻿"""Item-cluster bootstrap 95% CIs for the six per-model axes (appendix
 'Uncertainty, Significance, and Run Configuration'). Writes
 results/axis_ci.csv; PACTScore's own CI lives in results/metrics.csv.
 
@@ -74,11 +74,11 @@ def model_axis_cis(trials: List[dict], cells: Dict, model: str,
     out: Dict[str, Tuple[Optional[float], Optional[float]]] = {}
 
     # axes 1 & 2: pass^3 over neutral / pressure binding cells
-    neutral = {c.item_id: c.decided
+    neutral = {c.item: c.decided
                for c in M.model_cells(cells, model, "base", ["neutral"])
                if c.binds and c.decided}
     out["default_compliance"] = _cluster_boot(neutral, _p3, seed=21)
-    pressure = {c.item_id: c.decided
+    pressure = {c.item: c.decided
                 for c in M.model_cells(cells, model, "base", ["pressure"])
                 if c.decided}
     out["pressure_resistance"] = _cluster_boot(pressure, _p3, seed=22)
@@ -88,15 +88,15 @@ def model_axis_cis(trials: List[dict], cells: Dict, model: str,
     for c in M.model_cells(cells, model, "base", M.PUSHBACK_GROUPS):
         held = [o == "comply" for o in c.t2_pushback if o != "unclear"]
         if held:
-            pushback[c.item_id] = held
+            pushback[c.item] = held
     out["pushback_resistance"] = _cluster_boot(pushback, _p3, seed=23)
 
     # axis 4: signed recovery over (base rate, directive rate) item pairs
-    base = {c.item_id: c.rate for c in M.model_cells(cells, model, "base")
+    base = {c.item: c.rate for c in M.model_cells(cells, model, "base")
             if c.binds and c.rate is not None}
-    directive = {c.item_id: c.rate
-                 for c in M.model_cells(cells, model, "anti_adversarial")
-                 if c.item_id in base and c.rate is not None}
+    directive = {c.item: c.rate
+                 for c in M.model_cells(cells, model, "mandate")
+                 if c.item in base and c.rate is not None}
     steer = {iid: (base[iid], directive[iid]) for iid in directive}
     out["steerability"] = _cluster_boot(steer, _recovery, seed=24)
 
@@ -112,17 +112,17 @@ def model_axis_cis(trials: List[dict], cells: Dict, model: str,
             continue
         v = trans_votes.get(f"{model}||{t['trial_id']}")
         if v and sum(v.values()):
-            tviol.setdefault(t["item_id"], []).append(
+            tviol.setdefault(t["item"], []).append(
                 v.get("TRANSPARENT", 0) / sum(v.values()))
     out["transparency"] = _cluster_boot(tviol, _mean_of_lists, seed=25)
 
     # axis 6: equal-weighted mean of the two pass^3 halves; each half's item
     # set is resampled within itself so the halves stay balanced
-    bind_items = {c.item_id: c.decided
+    bind_items = {c.item: c.decided
                   for c in M.model_cells(cells, model, "base",
                                          M.BINDING_DISCERNMENT_GROUPS)
                   if c.decided}
-    stand_items = {c.item_id: c.decided
+    stand_items = {c.item: c.decided
                    for c in M.model_cells(cells, model, "base",
                                           M.NONBINDING_GROUPS)
                    if c.decided}

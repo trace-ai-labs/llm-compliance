@@ -1,8 +1,7 @@
 """Per-model six-axis profiles, PACTScore, and pairwise contrasts. Writes
-results/metrics.csv, cells.csv, and contrasts.csv; --figures redraws the
-profile figures via analysis.figures.
+results/metrics.csv, cells.csv, and contrasts.csv.
 
-Usage: python -m analysis.aggregate [--fast] [--figures]
+Usage: python -m analysis.aggregate [--fast]
 """
 
 import argparse
@@ -67,14 +66,14 @@ def write_cells_csv(cells: Dict[M.CellKey, M.Cell], out_path: str) -> None:
     os.makedirs(os.path.dirname(out_path) or ".", exist_ok=True)
     with open(out_path, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["model", "mode", "item_id", "scenario_id", "domain", "group",
+        w.writerow(["model", "mode", "item", "scenario", "domain", "group",
                     "pressure", "binds", "n_reps", "n_decided", "k_comply",
                     "rate", "wilson_lo", "wilson_hi", "unclear_rate"])
         for (model, mode, _), c in sorted(cells.items()):
             decided = [o for o in c.t1 if o != "unclear"]
             k = sum(o == "comply" for o in decided)
             lo, hi = M.wilson_ci(k, len(decided))
-            w.writerow([model, mode, c.item_id, c.scenario_id, c.domain,
+            w.writerow([model, mode, c.item, c.scenario, c.domain,
                         c.group, c.pressure, c.binds, len(c.t1), len(decided),
                         k, c.rate, lo, hi, c.unclear_rate])
 
@@ -87,7 +86,7 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
     with open(out_csv, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["model", "pact_score", "pact_score_lo", "pact_score_hi",
-                    "pact_base", "pact_directed",
+                    "pact_base", "pact_mandate",
                     "pact_steer_gap", "pact_base_t1", "pact_base_t2",
                     "pact_n_items", "pact_n_items_t2", "pact_n_items_full",
                     "pact_n_t2_missing"] + list(AXES)
@@ -97,7 +96,7 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
             p = profiles[m]
             d = p["detail"]
             pact = p["pact"]
-            b, dr = pact.base, pact.directed
+            b, dr = pact.base, pact.mandate
             pci_lo, pci_hi = p.get("pact_ci") or (None, None)
             w.writerow([m, pact.value, pci_lo, pci_hi,
                         b.value if b else None, dr.value if dr else None,
@@ -120,13 +119,6 @@ def write_outputs(profiles: Dict[str, Dict], contrasts: List[M.Contrast],
             w.writerow([c.model_a, c.model_b, c.diff, c.n_items, c.p, c.p_bh])
 
 
-def profile_figures(profiles: Dict[str, Dict]) -> None:
-    from analysis import figures
-    figures.radar(profiles)
-    figures.radar_quad(profiles)
-    figures.axis_correlation(profiles)
-
-
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--trials-dir", default=paths.TRIALS_DIR)
@@ -137,10 +129,6 @@ def main() -> None:
     ap.add_argument("--csv", default=OUT_CSV)
     ap.add_argument("--cells-csv", default=OUT_CELLS)
     ap.add_argument("--contrasts-csv", default=OUT_CONTRASTS)
-    ap.add_argument("--figures", action="store_true",
-                    help="also draw the radar and axis-correlation figures")
-    ap.add_argument("--figures-only", action="store_true",
-                    help="only redraw those figures (skips CSVs, CIs, contrasts)")
     ap.add_argument("--fast", action="store_true",
                     help="skip the PACTScore bootstrap CI and the paired "
                     "contrasts; contrasts.csv is left header-only")
@@ -152,11 +140,6 @@ def main() -> None:
     trans_votes = load_transparency_votes(args.transparency)
     print(f"{len(trials)} trials, {len(trans_votes)} transparency-labeled trials")
 
-    if args.figures_only:
-        profiles = profile_all(trials, trans_votes, args.quorum, fast=True)
-        profile_figures(profiles)
-        return
-
     profiles = profile_all(trials, trans_votes, args.quorum, fast=args.fast)
     cells = M.build_cells(trials)
     panel = profiles["_meta"]["panel"]
@@ -164,11 +147,11 @@ def main() -> None:
     write_cells_csv(cells, args.cells_csv)
 
     models = [m for m in sorted(profiles) if m != "_meta"]
-    print(f"\n{'model':<38} {'PACT':>7} {'base':>7} {'direct':>7}  "
+    print(f"\n{'model':<38} {'PACT':>7} {'base':>7} {'mandate':>7}  "
           + " ".join(f"{a[:9]:>9}" for a in AXES))
     for m in sorted(models, key=lambda m: -(profiles[m]["pact"].value or 0.0)):
         pact = profiles[m]["pact"]
-        b, dr = pact.base, pact.directed
+        b, dr = pact.base, pact.mandate
         vals = " ".join(f"{_fmt(profiles[m]['axes'][a]):>9}" for a in AXES)
         print(f"{m:<38} {_fmt(pact.value):>7} {_fmt(b.value if b else None):>7} "
               f"{_fmt(dr.value if dr else None):>7}  {vals}")
@@ -184,11 +167,18 @@ def main() -> None:
 
     write_outputs(profiles, contrasts, args.csv, args.contrasts_csv)
     meta = profiles["_meta"]
+    # inter-axis Pearson correlations across the panel (appendix
+    # 'Inter-axis correlation')
+    axis_values = {a: {m: profiles[m]["axes"][a] for m in models} for a in AXES}
+    corr = M.correlation_matrix(axis_values)
+    print("\n== inter-axis correlation (Pearson r across models) ==")
+    for (a, b), r in sorted(corr.items()):
+        print(f"  {a:24s} x {b:24s} " +
+              (f"{r:+.2f}" if r is not None else "n/a"))
+
     print(f"\ncommon core: {len(meta['core_items'])} items over a panel "
           f"of {len(meta['panel'])} models")
     print(f"wrote {args.csv}, {args.cells_csv}, {args.contrasts_csv}")
-    if args.figures:
-        profile_figures(profiles)
 
 
 if __name__ == "__main__":
