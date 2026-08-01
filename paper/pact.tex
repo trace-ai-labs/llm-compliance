@@ -1,5 +1,8 @@
 \documentclass[letterpaper]{article} % DO NOT CHANGE THIS
-\usepackage[submission]{aaai2027}  % DO NOT CHANGE THIS
+% preprint, not submission: [submission] both sets the "anonymized submission" copyright
+% notice and blanks \showauthors@on, which is what suppresses the author and affiliation
+% blocks. [preprint] drops the copyright notice and lets the real names render.
+\usepackage[preprint]{aaai2027}
 \usepackage[hyphens]{url}  % DO NOT CHANGE THIS
 \usepackage{graphicx} % DO NOT CHANGE THIS
 \urlstyle{rm} % DO NOT CHANGE THIS
@@ -13,6 +16,29 @@
 \usepackage{colortbl} % \cellcolor for the per-column-scaled leaderboard (xcolor is
                       % already loaded by aaai2027.sty; do NOT re-load it with options)
 \usepackage{enumitem} % the [nosep, leftmargin=*] options on the six-axis enumerate
+
+% Preprint only: AAAI forbids hyperref in submitted source, but for arXiv it makes the
+% cross-references and the bibliography navigable. Must load after natbib so citation
+% links resolve. Colors are muted so the page still reads as print.
+\usepackage[colorlinks=true,
+            linkcolor={black!12!blue},
+            citecolor={black!25!green},
+            urlcolor={black!12!blue},
+            breaklinks=true]{hyperref}
+
+% aaai2027.sty raises a hard PackageError if hyperref is loaded. That guard runs from an
+% \AtBeginDocument hook registered when the class is loaded, so we hide hyperref from
+% \@ifpackageloaded for exactly that moment and restore it immediately afterwards: our own
+% hook is registered later in the preamble, so it runs after theirs.
+%
+% THIS IS FOR THE arXiv PREPRINT ONLY. Revert to \usepackage[submission]{aaai2027} and
+% delete this block before preparing any AAAI camera-ready source.
+\makeatletter
+\expandafter\let\expandafter\aaai@savedhyperref\csname ver@hyperref.sty\endcsname
+\expandafter\let\csname ver@hyperref.sty\endcsname\relax
+\AtBeginDocument{%
+  \expandafter\let\csname ver@hyperref.sty\endcsname\aaai@savedhyperref}
+\makeatother
 
 \pdfinfo{
 /TemplateVersion (2027.1)
@@ -64,10 +90,14 @@
 \title{PACT: Can Enterprise AI Assistants Be Trusted Under Pressure?}
 
 \author{
-    Anonymous Submission
+    Mika Okamoto\textsuperscript{\rm 1,2},
+    Ansel Kaplan Erol\textsuperscript{\rm 1,3}
 }
 \affiliations{
-    Paper under double-blind review
+    \textsuperscript{\rm 1}Georgia Institute of Technology\quad
+    \textsuperscript{\rm 2}Decagon AI\quad
+    \textsuperscript{\rm 3}Baseten\\
+    mokamoto7@gatech.edu
 }
 
 % PACTScore figures quoted in the prose, generated from metrics_v2.csv by
@@ -75,9 +105,28 @@
 % prose cannot drift from the measurements.
 \input{tables/pact_macros}
 
+% ---------------------------------------------------------------------------
+% TODO: replace both placeholder URLs before posting.
+% ---------------------------------------------------------------------------
+\newcommand{\repourl}{https://github.com/ORG/REPO}
+\newcommand{\dataurl}{https://huggingface.co/datasets/ORG/pact}
+
+% Code and dataset links, set in the footnote area at the bottom of column 1 on
+% page 1. \footnotetext with a blank marker puts them there without a footnote
+% number appearing anywhere in the text.
+\newcommand{\resourcelinks}{%
+  \renewcommand{\thefootnote}{}%
+  \footnotetext{%
+    \raisebox{-0.22em}{\includegraphics[height=0.95em]{figures/gh_logo}}~\url{\repourl}\\[2pt]
+    \raisebox{-0.28em}{\includegraphics[height=1.05em]{figures/hf_logo}}~\url{\dataurl}%
+  }%
+  \renewcommand{\thefootnote}{\arabic{footnote}}%
+}
+
 \begin{document}
 
 \maketitle
+\resourcelinks
 
 \begin{abstract}
 \input{src/abstract}
@@ -92,6 +141,10 @@
 \input{src/methodology}
 \input{src/results}
 \input{src/conclusion}
+
+\section*{Acknowledgments}
+We thank Baseten AI Labs for providing the open-source inference compute used to run
+this benchmark.
 
 \label{bodyend}% marker: everything before here counts toward the 7-page limit
 \bibliography{aaai2027}
