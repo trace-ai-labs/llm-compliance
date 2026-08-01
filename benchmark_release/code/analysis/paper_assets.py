@@ -141,18 +141,13 @@ def build_model_table(rows: List[dict]) -> str:
         (r"\textbf{Model} & \textbf{Provider} & \textbf{Size} & \textbf{Rel.} & "
          r"\textbf{Training method} \\"),
         r"\midrule",
-        r"\multicolumn{5}{@{}l}{\emph{Open-weights}} \\",
     ]
-    seen_closed = False
     for m, meta in items:
-        if not meta["open"] and not seen_closed:
-            lines.append(r"\midrule")
-            lines.append(r"\multicolumn{5}{@{}l}{\emph{Closed / API-only "
-                         r"(no published parameter counts)}} \\")
-            seen_closed = True
         name = FS.DISPLAY_NAME.get(m, m.split("/")[-1]).replace("&", r"\&")
         if "instruct" in m.lower():
             name = f"\\textit{{{name}}}"
+        if not meta["open"]:
+            name = f"\\textbf{{{name}}}"
         prov = meta["provider"].replace("&", r"\&")
         note = meta["note"].replace("&", r"\&")
         lines.append(
