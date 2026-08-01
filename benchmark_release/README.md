@@ -41,7 +41,9 @@ pip install -r ../requirements.txt
 samples over 48 scenarios in 12 regulated domains (paper Section 3.1). Each
 underlying scenario cell ships as two samples that differ only in the system
 prompt: `base`, and `mandate` with the scenario's hard compliance directive
-appended (the paper's anti-adversarial mode).
+appended (the paper's anti-adversarial mode). The paper counts each sample as
+an item (its 3,364 items); the `item` field below names the shared scenario
+cell behind a base/mandate pair.
 
 ```python
 import json
@@ -63,6 +65,7 @@ samples = [json.loads(l) for l in open("../data/pact.jsonl", encoding="utf-8")]
 | `options` | the menu; each option carries `name`, `line`, `compliant` |
 | `gold` | the compliant option names used for scoring |
 | `pushback` | the scripted second turn sent when the model complies at turn 1 |
+| `generator_model` | which of the three generator models authored this sample's pack |
 | `canary` | contamination canary GUID (do not train on this text) |
 
 `data/trials/` holds the judged outcome of every trial in the paper (3
@@ -87,9 +90,13 @@ python -m analysis.axis_ci           # per-axis bootstrap CIs -> results/axis_ci
 python -m analysis.distributions     # difficulty by domain and by pressure family
                                      #   -> results/dist_*.csv
 python -m evaluation.judges label-stats        # transparency + abstention taxonomies
-python -m evaluation.eval_awareness report     # evaluation-awareness probe comparison
-python -m generation.generate --stats          # generation call and review counts
 ```
+
+The evaluation-awareness probe (paper Section 4.3) is the one result that
+required its own model runs; its per-model comparison table ships as
+`data/eval_awareness/summary.csv`. Rerunning the probe
+(`python -m evaluation.eval_awareness rewrite / run / report`) makes API calls
+and writes fresh outputs under `results/eval_awareness/`.
 
 All trials ran at temperature 1.0 with three replications per sample; scores
 are statistical estimates and are reported with item-cluster bootstrap
@@ -110,9 +117,9 @@ One trial is the full protocol of paper Section 3.1: the model answers the
 request; an LLM extractor maps the reply to comply / violate / unclear; an
 unclear reply gets one forcing follow-up asking it to commit to an option; a
 compliant reply gets the scripted pushback turn, resolved the same way. A
-turn-1 violation is terminal. New trials append to `results/new_trials/` and
-runs are resumable (rerun the same command after an interruption). Score them
-with `python -m analysis.aggregate --trials-dir ../results/new_trials`.
+turn-1 violation is terminal. New trials append to `results/new_trials/`;
+rerunning the same command continues an interrupted run. Score them with
+`python -m analysis.aggregate --trials-dir ../results/new_trials`.
 
 Transparency and abstention labels for new trials (the shipped labels already
 cover all 22 released models) come from the judge ensemble:
@@ -132,13 +139,13 @@ models that did not write it.
 python -m generation.registry              # list the 48 scenarios
 python -m generation.generate              # author scenario packs
 python -m generation.generate --status     # per-scenario progress
+python -m generation.generate --stats      # call and review counts for your run
 python -m generation.items                 # render packs -> results/generation/pact.jsonl
 ```
 
 The generation and judge prompts (reproduced in the paper appendix) are in
-`generation/gen_prompts.py` and `evaluation/judges.py`; the scenario seeds, the
-nine-pressure catalog, and the compliance mandate are in
-`generation/registry.py`.
+`generation/gen_prompts.py` and `evaluation/judges.py`; the scenario seeds and
+the nine-pressure catalog are in `generation/registry.py`.
 
 ## Code -> paper map
 

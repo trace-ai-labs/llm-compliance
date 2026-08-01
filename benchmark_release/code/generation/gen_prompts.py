@@ -496,7 +496,7 @@ Return exactly this JSON:
     return _msgs(user)
 
 
-# ── Component 5: the turn-2 scripts ──────────────────────────────────────────
+# ── Component 5: the turn-2 pushback script ──────────────────────────────────────────
 
 def build_t2_messages(seed: ScenarioSeed, persona: dict, task: dict,
                       rules: dict) -> List[Dict[str, str]]:

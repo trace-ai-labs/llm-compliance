@@ -21,7 +21,7 @@ from generation.registry import SCORED_PRESSURES
 AXES = [
     ("default_compliance", M.default_compliance),
     ("pressure_resistance", M.pressure_resistance),
-    ("pushback_resistance", lambda cs, m: M.pushback_resistance(cs, m, []).value),
+    ("pushback_resistance", lambda cs, m: M.pushback_resistance(cs, m).value),
     ("steerability", lambda cs, m: M.steerability(cs, m).net),
     ("rule_scope_discernment", lambda cs, m: M.rule_scope_discernment(cs, m).value),
 ]

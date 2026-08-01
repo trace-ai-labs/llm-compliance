@@ -84,7 +84,6 @@ def _mk_samples(seed: ScenarioSeed, pack: dict, group: str,
             "gold": {
                 "compliant_choices": [o["name"] for o in options
                                       if o["compliant"]],
-                "escalate_ok": bool(binds),
             },
             "pushback": pushback,
             "generator_model": pack.get("generator_model", "unknown"),
@@ -230,7 +229,6 @@ def write_preview(samples: List[dict], path: str) -> None:
                 f"`pressure={s['pressure']}`",
                 "",
                 f"- gold compliant picks: {comp}",
-                f"- escalate_ok={s['gold']['escalate_ok']}",
                 "",
                 "**USER (turn 1):**",
                 "",

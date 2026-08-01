@@ -25,18 +25,17 @@ def _fmt(v: Optional[float]) -> str:
     return f"{v:.3f}" if v is not None else "--"
 
 
-def profile_all(trials: List[dict], trans_votes: Dict, quorum: float = 0.6,
+def profile_all(trials: List[dict], trans_votes: Dict,
                 fast: bool = False) -> Dict[str, Dict]:
     """Six axes + PACTScore per model. `fast=True` skips the PACTScore
     bootstrap CI."""
     cells = M.build_cells(trials)
     models = sorted({t["model"] for t in trials})
-    core = M.common_core(cells, models, quorum) if models else []
 
     profiles: Dict[str, Dict] = {}
     for model in models:
         pr = M.pressure_resistance(cells, model)
-        pb = M.pushback_resistance(cells, model, core)
+        pb = M.pushback_resistance(cells, model)
         st = M.steerability(cells, model)
         tr = M.transparency(trials, trans_votes, model)
         rd = M.rule_scope_discernment(cells, model)
@@ -58,7 +57,7 @@ def profile_all(trials: List[dict], trans_votes: Dict, quorum: float = 0.6,
             "detail": {"pushback": pb, "steer": st,
                        "transparency": tr, "discernment": rd},
         }
-    profiles["_meta"] = {"core_items": core, "panel": models}
+    profiles["_meta"] = {"panel": models}
     return profiles
 
 
@@ -124,8 +123,6 @@ def main() -> None:
     ap.add_argument("--trials-dir", default=paths.TRIALS_DIR)
     ap.add_argument("--transparency", default=paths.TRANSPARENCY,
                     help="axis-5 transparency judge votes")
-    ap.add_argument("--quorum", type=float, default=0.6,
-                    help="common-core quorum reported alongside axis 3")
     ap.add_argument("--csv", default=OUT_CSV)
     ap.add_argument("--cells-csv", default=OUT_CELLS)
     ap.add_argument("--contrasts-csv", default=OUT_CONTRASTS)
@@ -140,7 +137,7 @@ def main() -> None:
     trans_votes = load_transparency_votes(args.transparency)
     print(f"{len(trials)} trials, {len(trans_votes)} transparency-labeled trials")
 
-    profiles = profile_all(trials, trans_votes, args.quorum, fast=args.fast)
+    profiles = profile_all(trials, trans_votes, fast=args.fast)
     cells = M.build_cells(trials)
     panel = profiles["_meta"]["panel"]
     contrasts = {} if args.fast else M.pact_contrasts(trials, panel)
@@ -166,7 +163,6 @@ def main() -> None:
                   f"(scored turn-1-only)")
 
     write_outputs(profiles, contrasts, args.csv, args.contrasts_csv)
-    meta = profiles["_meta"]
     # inter-axis Pearson correlations across the panel (appendix
     # 'Inter-axis correlation')
     axis_values = {a: {m: profiles[m]["axes"][a] for m in models} for a in AXES}
@@ -176,9 +172,7 @@ def main() -> None:
         print(f"  {a:24s} x {b:24s} " +
               (f"{r:+.2f}" if r is not None else "n/a"))
 
-    print(f"\ncommon core: {len(meta['core_items'])} items over a panel "
-          f"of {len(meta['panel'])} models")
-    print(f"wrote {args.csv}, {args.cells_csv}, {args.contrasts_csv}")
+    print(f"\nwrote {args.csv}, {args.cells_csv}, {args.contrasts_csv}")
 
 
 if __name__ == "__main__":

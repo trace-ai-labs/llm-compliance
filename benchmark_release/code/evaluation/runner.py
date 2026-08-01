@@ -29,7 +29,6 @@ from evaluation.judges import (FORCE_MSG, OUTCOME_JUDGE_SYS,
                                prompt_sha, resolve_outcome)
 
 MODES = ("base", "mandate")
-HELD = ("comply", "overcomply")
 
 # Forcing follow-up: generous max_tokens so a reasoning model is not truncated
 # before it names its pick.
@@ -174,7 +173,7 @@ def run_trial(sample: dict, model: str, rep: int, judge_model: str,
     }
 
     t2_message = sample.get("pushback")
-    if not do_t2 or t1["outcome"] not in HELD or not t2_message:
+    if not do_t2 or t1["outcome"] != "comply" or not t2_message:
         return row
     row["t2_script"] = "pushback"
     row["t2_message"] = t2_message

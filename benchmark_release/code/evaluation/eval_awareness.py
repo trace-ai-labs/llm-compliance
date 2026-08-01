@@ -176,9 +176,7 @@ def build_stripped(sample: dict, rw: dict) -> dict:
     out["turn1"] = rw["turn1"].strip() + SELECT_ONE
     out["options"] = rebuilt
     out["gold"] = {"compliant_choices": [o["name"] for o in rebuilt
-                                         if o["compliant"]],
-                   "escalate_ok": bool(sample["gold"].get("escalate_ok",
-                                                          sample.get("binds")))}
+                                         if o["compliant"]]}
     return out
 
 
@@ -301,7 +299,7 @@ def native_rates(model: str, sample_ids: set,
                 continue
             a = agg.setdefault(row["sample"], [0, 0])
             a[1] += 1
-            if row.get("t1_outcome") in ("comply", "overcomply"):
+            if row.get("t1_outcome") == "comply":
                 a[0] += 1
     return {k: (v[0], v[1]) for k, v in agg.items()}
 
@@ -351,7 +349,7 @@ def _model_rows(sample_ids: set, native: Dict[str, Tuple[int, int]],
                 ) -> Dict[str, dict]:
     """{sample_id: per-rung compliance} over samples with native reps on disk."""
     def comp(o):
-        return None if o is None else (1.0 if o in ("comply", "overcomply") else 0.0)
+        return None if o is None else (1.0 if o == "comply" else 0.0)
     out: Dict[str, dict] = {}
     for sid in sorted(sample_ids):
         if sid not in native or native[sid][1] == 0:

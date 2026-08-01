@@ -258,7 +258,9 @@ def main() -> None:
     ap.add_argument("-o", "--output",
                     default=os.path.join(paths.RESULTS, "batch_smoke.jsonl"))
     args = ap.parse_args()
-    reqs = [BatchRequest(id=f"smoke.{args.model}.{abs(hash(args.prompt)) % 10**6}",
+    import hashlib
+    tag = hashlib.sha256(args.prompt.encode("utf-8")).hexdigest()[:8]
+    reqs = [BatchRequest(id=f"smoke.{args.model}.{tag}",
                          model=args.model, max_tokens=2048,
                          messages=[{"role": "user", "content": args.prompt}])]
     done = run_batch(reqs, args.output)

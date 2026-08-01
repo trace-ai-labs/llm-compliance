@@ -1,8 +1,8 @@
 """Author scenario packs component-by-component.
 
-Every model in --models writes a complete pack per scenario; the other two
-models review each component (the dual-guard review of paper Section 3.1),
-and every rejection feeds back into the generator's next attempt.
+Every model in --models writes a complete pack per scenario; the other models
+review each component (the dual-guard review of paper Section 3.1), and every
+rejection feeds back into the generator's next attempt.
 
 Usage:
   python -m generation.generate                 # generate everything missing
@@ -52,7 +52,7 @@ NA_LOG = os.path.join(paths.GENERATION_DIR, "na_components.jsonl")
 # attempt budget; exhausting them flags the pipeline, never burns an attempt.
 MAX_CALL_RETRIES = 3
 
-# Each model authors complete packs; the other two review every component.
+# Each model authors complete packs; the others review every component.
 DEFAULT_GENERATORS = ["glm-5.2", "kimi", "ultra"]
 # Persona/task/rules are shared by all 13 cells, so they get a larger
 # attempt budget than the add-on components.
@@ -97,7 +97,11 @@ def extract_json(text: str) -> Optional[dict]:
 
 # ── Per-component validation (+ light normalization) ─────────────────────────
 
-_DASHES = str.maketrans({"-": "-", "-": "-", "‒": "-", "―": "-",
+# Literal U+2014/2013/2012/2015 dashes, smart quotes, arrow, ellipsis.
+# These keys must stay as the typographic characters - a cleanup pass that
+# "fixes" them to ASCII makes the stripping and the dash check no-ops.
+_DASHES = str.maketrans({"—": "-", "–": "-",
+                         "‒": "-", "―": "-",
                          "‘": "'", "’": "'",
                          "“": '"', "”": '"',
                          "→": ">", "…": "..."})
@@ -372,7 +376,7 @@ def validate_pack(pack: dict, seed: ScenarioSeed) -> List[str]:
 
     # em/en dashes are banned benchmark-wide
     flat = json.dumps(pack, ensure_ascii=False)
-    if any(d in flat for d in "--‒―"):
+    if any(d in flat for d in "—–‒―"):
         errs.append("pack contains em/en dashes")
 
     pressures = pack.get("pressures") or {}
@@ -555,8 +559,7 @@ def log_guard_review(sid: str, component: str, attempt: int,
                      generator_model: str, guard_model: str, verdict: str,
                      feedback: str, co_guard: str, co_verdict: str,
                      accepted: bool, log_path: str = GUARD_LOG) -> None:
-    """Append one flat review row (denormalized so any slice the analysis
-    wants is a plain filter/group-by)."""
+    """Append one flat row per guard verdict - the audit log of the review."""
     import time as _time
     kind, pressure_key = _component_kind(component)
     agree = None
@@ -1039,7 +1042,7 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--models", nargs="+", default=DEFAULT_GENERATORS,
                     metavar="MODEL",
-                    help="generator trio (aliases or full model ids); every "
+                    help="generator models (aliases or full model ids); every "
                          "model authors a complete pack for every scenario")
     ap.add_argument("--only", nargs="*", default=None, metavar="SCENARIO_ID",
                     help="restrict to these scenario ids")

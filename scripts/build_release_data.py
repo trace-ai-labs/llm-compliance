@@ -127,7 +127,8 @@ def export_pact():
                         it["hard_directive"] if mode == "mandate" else ""),
                     "turn1": it["turn1"],
                     "options": it["options"],
-                    "gold": it["gold"],
+                    "gold": {"compliant_choices":
+                             it["gold"]["compliant_choices"]},
                     "pushback": it["t2_if_compliant"],
                     "generator_model": SLUG[it["generator_model"]],
                     "canary": it["canary"],
