@@ -16,28 +16,33 @@
 \usepackage{colortbl} % \cellcolor for the per-column-scaled leaderboard (xcolor is
                       % already loaded by aaai2027.sty; do NOT re-load it with options)
 \usepackage{enumitem} % the [nosep, leftmargin=*] options on the six-axis enumerate
+\usepackage{fontawesome5} % \faEnvelope for the correspondence line on page 1
 
 % Preprint only: AAAI forbids hyperref in submitted source, but for arXiv it makes the
 % cross-references and the bibliography navigable. Must load after natbib so citation
 % links resolve. Colors are muted so the page still reads as print.
+\definecolor{pactlink}{RGB}{20,60,130}   % dark blue, used for every link type
 \usepackage[colorlinks=true,
-            linkcolor={black!12!blue},
-            citecolor={black!25!green},
-            urlcolor={black!12!blue},
+            linkcolor=pactlink,
+            citecolor=pactlink,
+            urlcolor=pactlink,
+            filecolor=pactlink,
             breaklinks=true]{hyperref}
 
-% aaai2027.sty raises a hard PackageError if hyperref is loaded. That guard runs from an
-% \AtBeginDocument hook registered when the class is loaded, so we hide hyperref from
-% \@ifpackageloaded for exactly that moment and restore it immediately afterwards: our own
-% hook is registered later in the preamble, so it runs after theirs.
+% aaai2027.sty raises a hard PackageError if hyperref is loaded, from an \AtBeginDocument
+% hook registered when the class is loaded. We silence that one error and let everything
+% else through. An earlier version hid hyperref from \@ifpackageloaded instead, which also
+% hid it from natbib: natbib only emits citation hyperlinks when it can see hyperref, so
+% every \citep came out as dead text. Silencing the error keeps hyperref visible.
 %
 % THIS IS FOR THE arXiv PREPRINT ONLY. Revert to \usepackage[submission]{aaai2027} and
 % delete this block before preparing any AAAI camera-ready source.
 \makeatletter
-\expandafter\let\expandafter\aaai@savedhyperref\csname ver@hyperref.sty\endcsname
-\expandafter\let\csname ver@hyperref.sty\endcsname\relax
-\AtBeginDocument{%
-  \expandafter\let\csname ver@hyperref.sty\endcsname\aaai@savedhyperref}
+\let\aaai@realPackageError\PackageError
+\def\PackageError#1#2#3{%
+  \def\aaai@tmpa{aaai}\def\aaai@tmpb{#1}%
+  \ifx\aaai@tmpa\aaai@tmpb\else\aaai@realPackageError{#1}{#2}{#3}\fi}
+\AtBeginDocument{\let\PackageError\aaai@realPackageError}
 \makeatother
 
 \pdfinfo{
@@ -94,10 +99,9 @@
     Ansel Kaplan Erol\textsuperscript{\rm 1,3}
 }
 \affiliations{
-    \textsuperscript{\rm 1}Georgia Institute of Technology\quad
-    \textsuperscript{\rm 2}Decagon AI\quad
-    \textsuperscript{\rm 3}Baseten\\
-    mokamoto7@gatech.edu
+    \textsuperscript{\rm 1}\href{https://www.gatech.edu}{Georgia Institute of Technology}\quad
+    \textsuperscript{\rm 2}\href{https://decagon.ai}{Decagon AI}\quad
+    \textsuperscript{\rm 3}\href{https://www.baseten.co}{Baseten}
 }
 
 % PACTScore figures quoted in the prose, generated from metrics_v2.csv by
@@ -115,11 +119,23 @@
 % Code and dataset links, set in the footnote area at the bottom of column 1 on
 % page 1. \footnotetext with a blank marker puts them there without a footnote
 % number appearing anywhere in the text.
+% Each mark sits in a fixed-width box so the three lines start at the same x. The logos
+% have different aspect ratios (GitHub is square, the Hugging Face mark is wider than it
+% is tall), so sizing them by height alone left the URLs ragged.
+\newcommand{\resourceicon}[1]{\makebox[1.5em][l]{#1}}
 \newcommand{\resourcelinks}{%
   \renewcommand{\thefootnote}{}%
   \footnotetext{%
-    \raisebox{-0.22em}{\includegraphics[height=0.95em]{figures/gh_logo}}~\url{\repourl}\\[2pt]
-    \raisebox{-0.28em}{\includegraphics[height=1.05em]{figures/hf_logo}}~\url{\dataurl}%
+    % \@makefntext has already emitted the paragraph indent by the time the argument is
+    % typeset, so setting \parindent here is too late; back it out explicitly instead.
+    % Without this the first line starts an indent-width right of the other two.
+    \hspace*{-\parindent}\setlength{\parindent}{0pt}%
+    \resourceicon{\raisebox{-0.20em}{\includegraphics[height=1em]{figures/gh_logo}}}%
+      \url{\repourl}\\[2pt]
+    \resourceicon{\raisebox{-0.28em}{\includegraphics[height=1.15em]{figures/hf_logo}}}%
+      \url{\dataurl}\\[2pt]
+    \resourceicon{\faEnvelope}%
+      \href{mailto:mokamoto7@gatech.edu}{mokamoto7@gatech.edu}%
   }%
   \renewcommand{\thefootnote}{\arabic{footnote}}%
 }
