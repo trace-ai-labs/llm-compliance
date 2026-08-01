@@ -1,5 +1,5 @@
-"""Filesystem layout of the release. Run every command from this directory
-(benchmark_release/code), e.g. `python -m analysis.aggregate`."""
+"""Filesystem layout of the release. Run every command from the code/
+directory, e.g. `python -m analysis.aggregate`."""
 import os
 
 CODE = os.path.dirname(os.path.abspath(__file__))

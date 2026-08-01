@@ -8,7 +8,6 @@ number in the paper.
 ## Layout
 
 ```
-benchmark_release/
 ├── data/                       everything the analysis reads
 │   ├── pact.jsonl              the dataset: 3,364 samples
 │   ├── trials/<model>.jsonl    judged outcomes: 22 models x 10,092 trials each
