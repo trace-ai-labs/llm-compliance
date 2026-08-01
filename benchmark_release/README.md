@@ -9,7 +9,7 @@ number in the paper.
 
 ```
 benchmark_release/
-├── data/                       the shipped record (inputs to all analysis)
+├── data/                       everything the analysis reads
 │   ├── pact.jsonl              the dataset: 3,364 samples
 │   ├── trials/<model>.jsonl    judged outcomes: 22 models x 10,092 trials each
 │   ├── labels/
@@ -22,14 +22,13 @@ benchmark_release/
 │   ├── evaluation/             running models and judging replies
 │   └── analysis/               metrics and statistics
 ├── results/                    analysis outputs (CSV)
-├── figures/                    the paper's figures, as rendered
 └── requirements.txt
 ```
 
 The split is by role: `generation/` writes the dataset, `evaluation/` talks to
-model APIs (running trials, judging replies), and `analysis/` turns the shipped
-record in `data/` into every number in the paper without any API call. Run
-every command below from `code/`:
+model APIs (running trials, judging replies), and `analysis/` turns `data/`
+into every number in the paper without any API call. Run every command below
+from `code/`:
 
 ```
 cd code
@@ -89,7 +88,7 @@ python -m analysis.distributions     # difficulty by domain and by pressure fami
                                      #   -> results/dist_*.csv
 python -m evaluation.judges label-stats        # transparency + abstention taxonomies
 python -m evaluation.eval_awareness report     # evaluation-awareness probe comparison
-python -m generation.generate --stats          # generation call/review accounting
+python -m generation.generate --stats          # generation call and review counts
 ```
 
 All trials ran at temperature 1.0 with three replications per sample; scores
@@ -130,8 +129,8 @@ scenario component by component, and every component is reviewed by the two
 models that did not write it.
 
 ```
-python -m generation.registry              # print the 48-scenario roster
-python -m generation.generate              # author scenario packs (resumable)
+python -m generation.registry              # list the 48 scenarios
+python -m generation.generate              # author scenario packs
 python -m generation.generate --status     # per-scenario progress
 python -m generation.items                 # render packs -> results/generation/pact.jsonl
 ```

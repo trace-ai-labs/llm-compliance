@@ -1,4 +1,4 @@
-"""Stage 1: author scenario packs component-by-component (batched, resumable).
+"""Author scenario packs component-by-component.
 
 Every model in --models writes a complete pack per scenario; the other two
 models review each component (the dual-guard review of paper Section 3.1),
@@ -44,8 +44,8 @@ COMPONENTS_DIR = os.path.join(paths.GENERATION_DIR, "components")
 RAW_PATH = os.path.join(paths.GENERATION_DIR, "gen_raw.jsonl")
 # Guard review rows append here as generation runs.
 GUARD_LOG = os.path.join(paths.GENERATION_DIR, "guard_log.jsonl")
-# Worklist of components that exhausted their attempts (or depend on one
-# that did); rerun them with --retry-na.
+# Components that ran out of attempts (or depend on one that did) are
+# listed here; rerun them with --retry-na.
 NA_LOG = os.path.join(paths.GENERATION_DIR, "na_components.jsonl")
 
 # Transport-level retries per call, separate from the content-rejection
@@ -54,11 +54,11 @@ MAX_CALL_RETRIES = 3
 
 # Each model authors complete packs; the other two review every component.
 DEFAULT_GENERATORS = ["glm-5.2", "kimi", "ultra"]
-# The spine (persona/task/rules) is shared by all 13 cells, so it gets a
-# larger attempt budget than the add-ons.
-MAX_GEN_ATTEMPTS = 8        # per spine component; after this, NA placeholder + flag
+# Persona/task/rules are shared by all 13 cells, so they get a larger
+# attempt budget than the add-on components.
+MAX_GEN_ATTEMPTS = 8        # per core component; after this, NA placeholder + flag
 MAX_GEN_ATTEMPTS_ADDON = 4  # per add-on component (pressures, guard, t2, attacks)
-_SPINE_COMPONENTS = ("persona", "task", "rules")
+_CORE_COMPONENTS = ("persona", "task", "rules")
 
 GUARD_KEYS = ("guard_nonbinding",)
 
@@ -72,12 +72,11 @@ COMPONENT_DEPS: Dict[str, Tuple[str, ...]] = {
     "t2": ("persona", "task", "rules"),
     "attacks": ("persona", "task", "rules", "guard_nonbinding"),
 }
-ALL_COMPONENTS = tuple(COMPONENT_DEPS)   # 15 per scenario (spine 3 + 9 pressures + guard + t2 + attacks)
+ALL_COMPONENTS = tuple(COMPONENT_DEPS)   # 15 per scenario (core 3 + 9 pressures + guard + t2 + attacks)
 
 
-def _component_cap(component: str, spine_max: int, addon_max: int) -> int:
-    """Attempt budget: spine_max for spine components, addon_max for add-ons."""
-    return spine_max if component in _SPINE_COMPONENTS else addon_max
+def _component_cap(component: str, core_max: int, addon_max: int) -> int:
+    return core_max if component in _CORE_COMPONENTS else addon_max
 
 
 # ── JSON extraction ──────────────────────────────────────────────────────────
@@ -345,12 +344,12 @@ def validate_pack(pack: dict, seed: ScenarioSeed) -> List[str]:
     errs: List[str] = []
     if pack.get("scenario_id") != seed.id:
         errs.append(f"scenario_id is {pack.get('scenario_id')!r}, expected {seed.id!r}")
-    # A spine NA (persona/task/rules) empties the pack; add-on NA only costs
-    # its own cells, so only spine NA blocks here.
-    spine_na = [c for c in (pack.get("_na_components") or [])
-                if c in _SPINE_COMPONENTS]
-    if spine_na:
-        errs.append(f"unusable pack: spine component(s) NA {spine_na} - "
+    # A core-component NA (persona/task/rules) empties the pack; an add-on NA
+    # only costs its own cells.
+    core_na = [c for c in (pack.get("_na_components") or [])
+                if c in _CORE_COMPONENTS]
+    if core_na:
+        errs.append(f"unusable pack: core component(s) NA {core_na} - "
                     f"persona/task/rules failed review, so the pack is empty")
 
     for key in ("system_prompt", "hard_directive", "t1_request",
@@ -450,7 +449,7 @@ def pack_status(samples_dir: str = SAMPLES_DIR
 
 def _next_attempt(scenario_id: str, component: str, model: str,
                   raw_path: str) -> int:
-    """Per-(scenario, component, generator) attempt counter so reruns mint
+    """Per-(scenario, component, generator) attempt counter so repeat runs mint
     fresh batch ids for still-invalid components."""
     if not os.path.exists(raw_path):
         return 0
@@ -494,7 +493,7 @@ def na_component(component: str, reason: str) -> dict:
 
 def log_na_component(sid: str, generator: str, component: str, reason: str,
                      last_feedback: str = "", path: str = NA_LOG) -> None:
-    """Append one row to the NA worklist (retried via --retry-na)."""
+    """Record a component that ran out of attempts (retried via --retry-na)."""
     import time as _time
     row = {"ts": _time.time(), "scenario_id": sid, "generator_model": generator,
            "component": component, "reason": reason,
@@ -909,7 +908,7 @@ def generate(models: List[str], only: Optional[List[str]] = None, workers: int =
             pack["_na_components"] = na
         errs = validate_pack(pack, seed)
         if errs:
-            # spine NA or a structural defect: not shipped as a sample
+            # core-component NA or a structural defect: excluded
             n_invalid += 1
             print(f"  {seed.id}[{tag(model)}]: assembled pack INVALID - "
                   + "; ".join(errs[:4]))
@@ -939,7 +938,7 @@ def generate(models: List[str], only: Optional[List[str]] = None, workers: int =
 
 
 def print_stats(raw_path: str = RAW_PATH) -> None:
-    """Generation/guard call accounting from the raw log: attempts, reviews,
+    """Generation and guard call counts from the raw log: attempts, reviews,
     and guard pass rates by component, pressure, scenario, domain, model."""
     if not os.path.exists(raw_path):
         raise SystemExit(f"{raw_path} not found - nothing generated yet")
@@ -1048,7 +1047,7 @@ def main() -> None:
     ap.add_argument("--no-guard", action="store_true",
                     help="skip guard review (structural validation only)")
     ap.add_argument("--max-attempts", type=int, default=MAX_GEN_ATTEMPTS,
-                    help="generation attempts for a spine component "
+                    help="generation attempts for a core component "
                          "(persona/task/rules) before an NA placeholder is "
                          "written and the pack is flagged")
     ap.add_argument("--max-attempts-addon", type=int,
@@ -1057,7 +1056,7 @@ def main() -> None:
                          "pressure, guard twin, t2, attacks) before NA")
     ap.add_argument("--retry-na", action="store_true",
                     help="clear NA placeholders (and their rejection history) "
-                         "so components on the na_components.jsonl worklist "
+                         "so components listed in na_components.jsonl "
                          "get a fresh set of attempts")
     ap.add_argument("--max-tokens", type=int, default=8000,
                     help="per-component completion cap")
@@ -1067,7 +1066,7 @@ def main() -> None:
     ap.add_argument("--status", action="store_true",
                     help="print the validation report and exit (no API calls)")
     ap.add_argument("--stats", action="store_true",
-                    help="print generation/guard call accounting from the raw "
+                    help="print generation/guard call counts from the raw "
                          "log and exit (no API calls)")
     args = ap.parse_args()
 

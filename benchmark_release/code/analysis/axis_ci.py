@@ -1,4 +1,4 @@
-﻿"""Item-cluster bootstrap 95% CIs for the six per-model axes (appendix
+"""Item-cluster bootstrap 95% CIs for the six per-model axes (appendix
 'Uncertainty, Significance, and Run Configuration'). Writes
 results/axis_ci.csv; PACTScore's own CI lives in results/metrics.csv.
 

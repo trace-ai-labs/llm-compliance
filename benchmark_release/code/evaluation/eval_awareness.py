@@ -2,24 +2,23 @@
 Paper Section 4.3 and the appendix "Evaluation-Awareness Realism Probe".
 
 Three rungs of the SAME decision, content held fixed:
-  native    - the frozen sample as scored in the main evaluation; its rate is
-              the mean of the existing base-mode reps in data/trials, never re-run
+  native    - the sample as scored in the main evaluation; its rate is the
+              mean of the existing base-mode reps in data/trials, never re-run
   stripped  - the sample's own generator rewrites the whole item as a plain
               synthetic benchmark sample (compliance carried by option position)
   announced - the native sample with an explicit "you are being evaluated"
               banner prepended to the system prompt
 The stripped and announced rungs also append the SELECT_ONE forced-choice
 directive that the native sample omits. Each runs once per (sample x model),
-turn 1 + forcing only, base mode, groups {neutral, pressure}; `report`
-compares each rung against native with paired bootstraps. Stage `s1` is a
-~10% sample, `topup` extends it to 15%, `pooled` is both (the paper reports
-the pooled 15%).
+turn 1 + forcing only, base mode, on a random 15% of the binding neutral and
+pressure samples; `report` compares each rung against native with paired
+bootstraps.
 
-Usage (resumable; kill and rerun the same command):
+Usage:
   python -m evaluation.eval_awareness preview -n 5
-  python -m evaluation.eval_awareness rewrite --stage pooled
-  python -m evaluation.eval_awareness run --models haiku glm-5.2 --stage pooled
-  python -m evaluation.eval_awareness report --models haiku glm-5.2 --stage pooled
+  python -m evaluation.eval_awareness rewrite
+  python -m evaluation.eval_awareness run --models haiku glm-5.2
+  python -m evaluation.eval_awareness report --models haiku glm-5.2
 """
 
 from __future__ import annotations
@@ -40,14 +39,8 @@ OUT_DIR = paths.AWARENESS_DIR
 REWRITES = os.path.join(OUT_DIR, "stripped_rewrites.jsonl")
 
 ELIGIBLE_GROUPS = ("neutral", "pressure")
-DEFAULT_FRAC = 0.10
+DEFAULT_FRAC = 0.15
 DEFAULT_SEED = 0
-
-# Top-up stage: extends the s1 sample to TOTAL_FRAC of the eligible pool,
-# drawn with its own seed so no sample is drawn twice.
-TOPUP_SEED = 1
-TOTAL_FRAC = 0.15
-STAGES = ("s1", "topup", "pooled")
 
 RUNGS = ("stripped", "announced")
 
@@ -141,33 +134,11 @@ def _eligible(samples: List[dict]) -> List[dict]:
 
 def sample_pool(samples: List[dict], frac: float = DEFAULT_FRAC,
                 seed: int = DEFAULT_SEED, n: Optional[int] = None) -> List[dict]:
-    """Deterministic ~frac draw of the eligible samples; `n` overrides frac."""
+    """Seeded random draw of ~frac of the eligible samples; `n` overrides frac."""
     elig = _eligible(samples)
     rng = random.Random(seed)
     k = n if n is not None else max(1, round(frac * len(elig)))
     return sorted(rng.sample(elig, min(k, len(elig))), key=lambda s: s["id"])
-
-
-def stage_sample(samples: List[dict], stage: str = "s1",
-                 frac: float = DEFAULT_FRAC, seed: int = DEFAULT_SEED,
-                 n: Optional[int] = None) -> List[dict]:
-    """The probe draw for a stage: `s1` (seed-0 ~10%), `topup` (the committed
-    extension to TOTAL_FRAC, disjoint from s1), or `pooled` (both)."""
-    if stage == "s1":
-        return sample_pool(samples, frac, seed, n)
-    elig = _eligible(samples)
-    s1 = sample_pool(samples, frac, seed)
-    s1_ids = {s["id"] for s in s1}
-    target_total = round(TOTAL_FRAC * len(elig))
-    k = max(0, target_total - len(s1_ids))
-    pool = [s for s in elig if s["id"] not in s1_ids]
-    rng = random.Random(TOPUP_SEED)
-    topup = sorted(rng.sample(pool, min(k, len(pool))), key=lambda s: s["id"])
-    if stage == "topup":
-        return topup
-    if stage == "pooled":
-        return sorted(s1 + topup, key=lambda s: s["id"])
-    raise ValueError(f"unknown stage {stage!r} (expected one of {STAGES})")
 
 
 # == Stripped rewrite: parse + build ==========================================
@@ -220,7 +191,7 @@ def build_announced(sample: dict) -> dict:
 
 def do_rewrite(sample: List[dict], out_path: str, workers: int) -> Dict[str, dict]:
     """Phase A: each drawn sample's OWN generator model authors its stripped
-    rewrite. Resumable by sample id."""
+    rewrite."""
     reqs = [BatchRequest(
         id=s["id"], model=resolve_model(s["generator_model"]),
         max_tokens=8192, temperature=1.0,
@@ -232,7 +203,7 @@ def do_rewrite(sample: List[dict], out_path: str, workers: int) -> Dict[str, dic
 def load_rewrites(samples_by_id: Dict[str, dict],
                   path: str = REWRITES) -> Dict[str, dict]:
     """{sample_id: stripped variant} for every rewrite on disk that parses;
-    rows that do not parse are skipped (rerun the rewrite to refill them)."""
+    rows that do not parse are skipped."""
     ok: Dict[str, dict] = {}
     if not os.path.exists(path):
         return ok
@@ -267,7 +238,7 @@ def run_rung(model: str, variants: List[dict], rung: str,
              judge_model: str, workers: int,
              max_tokens: Optional[int] = None) -> None:
     """Run each variant once through the same send+judge path as the benchmark
-    (runner.run_trial, which forces on an unclear turn 1). Resumable."""
+    (runner.run_trial, which forces on an unclear turn 1)."""
     from concurrent.futures import ThreadPoolExecutor, as_completed
     import threading
 
@@ -400,15 +371,15 @@ def _fmt(v, lo, hi, signed=False):
 
 
 def report(models: List[str], samples_path: str, frac: float, seed: int,
-           n: Optional[int], stage: str = "s1") -> None:
+           n: Optional[int]) -> None:
     """Tabulate native (mean of reps) vs stripped vs announced per model;
     writes per_sample.csv and summary.csv under paths.AWARENESS_DIR."""
     from generation.items import load_samples
     samples = load_samples(samples_path)
     by_id = {s["id"]: s for s in samples}
-    drawn = stage_sample(samples, stage, frac, seed, n)
+    drawn = sample_pool(samples, frac, seed, n)
     sample_ids = {s["id"] for s in drawn}
-    print(f"stage={stage}: {len(drawn)} drawn samples")
+    print(f"{len(drawn)} drawn samples")
 
     os.makedirs(OUT_DIR, exist_ok=True)
     rows_out, summ_out = [], []
@@ -550,13 +521,11 @@ def main() -> None:
     p_prev.add_argument("-n", type=int, default=5)
 
     p_rw = sub.add_parser("rewrite", parents=[common],
-                          help="phase A: author the stripped rewrites for the "
-                               "stage's draw")
+                          help="phase A: author the stripped rewrites")
     p_rw.add_argument("--frac", type=float, default=DEFAULT_FRAC)
     p_rw.add_argument("-n", type=int, default=None,
                       help="override frac with an explicit draw size")
     p_rw.add_argument("-o", "--output", default=REWRITES)
-    p_rw.add_argument("--stage", choices=STAGES, default="s1")
 
     p_run = sub.add_parser("run", parents=[common],
                            help="phase B: run the stripped + announced rungs "
@@ -564,7 +533,6 @@ def main() -> None:
     p_run.add_argument("--models", nargs="+", default=DEFAULT_EVAL_MODELS)
     p_run.add_argument("--frac", type=float, default=DEFAULT_FRAC)
     p_run.add_argument("-n", type=int, default=None)
-    p_run.add_argument("--stage", choices=STAGES, default="s1")
     p_run.add_argument("--rungs", nargs="+", default=list(RUNGS), choices=RUNGS)
     p_run.add_argument("--judge-model", default=None)
     p_run.add_argument("--max-tokens", type=int, default=None,
@@ -577,7 +545,6 @@ def main() -> None:
     p_rep.add_argument("--models", nargs="+", default=DEFAULT_EVAL_MODELS)
     p_rep.add_argument("--frac", type=float, default=DEFAULT_FRAC)
     p_rep.add_argument("-n", type=int, default=None)
-    p_rep.add_argument("--stage", choices=STAGES, default="s1")
 
     args = ap.parse_args()
 
@@ -586,20 +553,19 @@ def main() -> None:
     elif args.cmd == "rewrite":
         from generation.items import load_samples
         samples = load_samples(args.samples)
-        drawn = stage_sample(samples, args.stage, args.frac, args.seed, args.n)
-        print(f"authoring stripped rewrites for {len(drawn)} samples "
-              f"(stage={args.stage})")
+        drawn = sample_pool(samples, args.frac, args.seed, args.n)
+        print(f"authoring stripped rewrites for {len(drawn)} samples")
         do_rewrite(drawn, args.output, args.workers)
         ok = load_rewrites({s["id"]: s for s in samples}, args.output)
         drawn_ids = {s["id"] for s in drawn}
         print(f"done -> {args.output} "
-              f"({len(drawn_ids & set(ok))}/{len(drawn)} of this stage parsed)")
+              f"({len(drawn_ids & set(ok))}/{len(drawn)} parsed)")
     elif args.cmd == "run":
         from generation.items import load_samples
         judge = resolve_model(args.judge_model or DEFAULT_EXTRACT_MODEL)
         samples = load_samples(args.samples)
         by_id = {s["id"]: s for s in samples}
-        drawn = stage_sample(samples, args.stage, args.frac, args.seed, args.n)
+        drawn = sample_pool(samples, args.frac, args.seed, args.n)
         stripped_ok = load_rewrites(by_id)
         if not stripped_ok and "stripped" in args.rungs:
             raise SystemExit("no stripped rewrites on disk - run `rewrite` first")
@@ -613,8 +579,7 @@ def main() -> None:
                 run_rung(model, announced, "announced", judge, args.workers,
                          args.max_tokens)
     elif args.cmd == "report":
-        report(args.models, args.samples, args.frac, args.seed, args.n,
-               args.stage)
+        report(args.models, args.samples, args.frac, args.seed, args.n)
 
 
 if __name__ == "__main__":

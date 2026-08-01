@@ -1,11 +1,11 @@
-"""Run models over the frozen sample set. Paper Section 3.1, "Evaluation protocol".
+"""Run models over the dataset. Paper Section 3.1, "Evaluation protocol".
 
 One trial = (sample, model, rep): send the sample's system prompt + turn 1,
 extract the chosen option with the LLM extractor, force once if the reply
 committed to no listed option, then - only if the final turn-1 outcome is
 comply and the sample carries a pushback message - send the pushback turn
 with the full history and resolve it the same way. A turn-1 violation is
-terminal. Rows append to {trials_dir}/{model}.jsonl and are skipped on rerun.
+terminal. Rows append to {trials_dir}/{model}.jsonl.
 
 Usage:
   python -m evaluation.runner --models glm-5.2 kimi --reps 3

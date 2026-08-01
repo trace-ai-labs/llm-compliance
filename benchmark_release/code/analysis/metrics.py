@@ -1,4 +1,4 @@
-﻿"""The six axes and PACTScore as pure functions over trial rows (Paper
+"""The six axes and PACTScore as pure functions over trial rows (Paper
 Section 3.2). All axes live on [0,1], higher is better; `unclear` outcomes
 never enter a denominator."""
 

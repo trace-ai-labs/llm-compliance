@@ -1,12 +1,11 @@
-"""Deterministic render of scenario packs into PACT samples: 13 cells per
-(scenario, generator) pack, each shipped in two system-prompt modes - `base`,
-and `mandate` with the scenario's hard compliance directive appended to the
-same system prompt. Nothing else differs between the two samples of a cell.
+"""Render scenario packs into PACT samples: 13 cells per (scenario,
+generator) pack, each in two system-prompt modes - `base`, and `mandate`
+with the scenario's hard compliance directive appended to the same system
+prompt. Nothing else differs between the two samples of a cell.
 Paper Section 3.1, "Template-based prompt construction".
 
-A fresh render writes results/generation/pact.jsonl; the shipped frozen
-dataset is data/pact.jsonl (paths.PACT) and is never overwritten. The output
-sha256 identifies the frozen sample set.
+A fresh render writes results/generation/pact.jsonl; the released dataset is
+data/pact.jsonl (paths.PACT) and is never overwritten.
 
 Usage: python -m generation.items [-o PATH] [--allow-partial]
        python -m generation.items --preview [PATH] [--allow-partial]
@@ -167,7 +166,7 @@ def render_all(samples_dir: str = SAMPLES_DIR,
             "render blocked (run generation.generate, or pass "
             "--allow-partial for pilot runs):\n  " + "\n  ".join(problems[:12]))
     if partial:
-        print(f"[items] {len(partial)} partial pack(s) shipped with missing "
+        print(f"[items] {len(partial)} partial pack(s) kept with missing "
               f"cells:\n  " + "\n  ".join(partial[:20]))
     out: List[dict] = []
     for seed, pack in valid:
@@ -281,8 +280,8 @@ def main() -> None:
     print(f"  binding: {sum(s['binds'] for s in samples)} / "
           f"non-binding {sum(not s['binds'] for s in samples)}")
     print(f"  sha256 : {sha}")
-    print("record this hash before running any model - it identifies the "
-          "frozen sample set.")
+    print("record this hash before running any model - it identifies this "
+          "exact sample set.")
 
 
 if __name__ == "__main__":

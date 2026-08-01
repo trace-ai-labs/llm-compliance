@@ -1,10 +1,8 @@
-"""Batched LLM calls with on-disk resume - the pipeline's only API layer.
+"""The only API layer: batched chat completions against OpenRouter
+(OPENROUTER_API_KEY), with retries. Results append to a JSONL keyed by
+request id, so an interrupted batch continues where it stopped.
 
-Every call is an OpenAI-SDK chat completion against OpenRouter
-(OPENROUTER_API_KEY). Results append to a JSONL keyed by request id;
-rerunning the same batch skips completed ids.
-
-CLI (smoke test):
+Smoke test:
   python -m evaluation.batch --model glm-5.2 --prompt "say hi"
 """
 
@@ -98,8 +96,7 @@ def _get_client(api_key: str) -> OpenAI:
 
 @dataclass
 class BatchRequest:
-    """One chat completion. `id` must be unique and stable across reruns -
-    it is the resume key."""
+    """One chat completion. `id` must be unique and stable across runs."""
     id: str
     model: str
     messages: List[Dict[str, str]]        # includes the system message
@@ -177,7 +174,7 @@ def call_one(req: BatchRequest, api_key: str, max_retries: int = 5,
 
 
 def load_done(out_path: str) -> Dict[str, dict]:
-    """Successful rows already on disk, keyed by request id (the resume set)."""
+    """Successful rows already on disk, keyed by request id."""
     done: Dict[str, dict] = {}
     if not os.path.exists(out_path):
         return done
@@ -199,8 +196,8 @@ def run_batch(requests: List[BatchRequest], out_path: str,
               max_workers: int = 8, rpm: int = 0,
               quiet: bool = False, api_key: Optional[str] = None) -> Dict[str, dict]:
     """Run all requests concurrently, appending results to `out_path` (JSONL).
-    Ids already successful there are skipped; failed rows are retried on the
-    next invocation. Returns {id: result_row} for every successful request."""
+    Ids already successful there are skipped. Returns {id: result_row} for
+    every successful request."""
     ids = [r.id for r in requests]
     assert len(ids) == len(set(ids)), "duplicate request ids in batch"
 
