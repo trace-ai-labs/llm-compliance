@@ -1,6 +1,6 @@
 ---
 pretty_name: PACT
-license: cc-by-nc-4.0
+license: mit
 language:
 - en
 task_categories:
@@ -10,17 +10,6 @@ tags:
 - compliance
 - agents
 - multi-turn
-extra_gated_heading: Access to PACT is gated
-extra_gated_prompt: >-
-  PACT is released for non-commercial research use only, under
-  CC-BY-NC-4.0. By requesting access you agree to (1) use the dataset only
-  for non-commercial research, (2) not use any part of it to train models,
-  and (3) not redistribute the data outside these terms.
-extra_gated_fields:
-  Affiliation: text
-  Intended use: text
-  I agree to use this dataset for non-commercial research only: checkbox
-  I agree not to train models on this data: checkbox
 ---
 
 # PACT: Can Enterprise AI Assistants Be Trusted Under Pressure?
@@ -62,8 +51,6 @@ Samples vary along three axes you can slice by:
 ```python
 from datasets import load_dataset
 
-# gated: accept the license on the dataset page first, then authenticate
-# (huggingface-cli login, or pass token=...)
 pact = load_dataset("trace-ai-labs/pact", split="test")
 ```
 
@@ -107,9 +94,10 @@ reply = your_model(messages)
 | `pressure` | which of the nine pressure families the user turn carries (`none` on neutral cells) |
 | `scenario` | one of the 48 scenarios, `{domain}.{letter}` |
 
-## License and permitted use
+## License
 
-CC-BY-NC-4.0, gated: non-commercial research use only. Do not train models on
-this data, and do not redistribute it outside these terms.
+MIT.
 
-Paper and evaluation code: links to follow.
+Evaluation code: [github.com/trace-ai-labs/pact](https://github.com/trace-ai-labs/pact).
+Leaderboard, results, and trial transcripts:
+[trace-ai-labs.github.io/pact](https://trace-ai-labs.github.io/pact/).

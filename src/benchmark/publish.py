@@ -1,10 +1,10 @@
-"""Package the released PACT dataset for Hugging Face and push it, gated.
+"""Package the released PACT dataset for Hugging Face and push it.
 
 Reads benchmark_release/data/pact.jsonl (the released sample set), types it
 into flat columns (lists and option structs stay native, never JSON strings),
 writes a local copy + dataset card under results/benchmark/hf/, and pushes to
-the Hub as a gated, CC-BY-NC-4.0 dataset (users must accept the license to
-download). Token comes from HF_API_KEY in .env.
+the Hub as an ungated, MIT-licensed dataset. Token comes from HF_API_KEY in
+.env.
 
 Usage:
   python -m src.benchmark.publish                       # build locally only
@@ -75,7 +75,7 @@ def dataset_card(n_rows: int, repo_id: str) -> str:
     cols = "\n".join(f"| `{k}` | {v} |" for k, v in COLUMNS.items())
     return f"""---
 pretty_name: PACT
-license: cc-by-nc-4.0
+license: mit
 language:
 - en
 task_categories:
@@ -85,17 +85,6 @@ tags:
 - compliance
 - agents
 - multi-turn
-extra_gated_heading: Access to PACT is gated
-extra_gated_prompt: >-
-  PACT is released for non-commercial research use only, under
-  CC-BY-NC-4.0. By requesting access you agree to (1) use the dataset only
-  for non-commercial research, (2) not use any part of it to train models,
-  and (3) not redistribute the data outside these terms.
-extra_gated_fields:
-  Affiliation: text
-  Intended use: text
-  I agree to use this dataset for non-commercial research only: checkbox
-  I agree not to train models on this data: checkbox
 ---
 
 # PACT: Can Enterprise AI Assistants Be Trusted Under Pressure?
@@ -137,8 +126,6 @@ Samples vary along three axes you can slice by:
 ```python
 from datasets import load_dataset
 
-# gated: accept the license on the dataset page first, then authenticate
-# (huggingface-cli login, or pass token=...)
 pact = load_dataset("{repo_id}", split="test")
 ```
 
@@ -173,12 +160,13 @@ reply = your_model(messages)
 |---|---|
 {cols}
 
-## License and permitted use
+## License
 
-CC-BY-NC-4.0, gated: non-commercial research use only. Do not train models on
-this data, and do not redistribute it outside these terms.
+MIT.
 
-Paper and evaluation code: links to follow.
+Evaluation code: [github.com/trace-ai-labs/pact](https://github.com/trace-ai-labs/pact).
+Leaderboard, results, and trial transcripts:
+[trace-ai-labs.github.io/pact](https://trace-ai-labs.github.io/pact/).
 """
 
 
@@ -210,9 +198,8 @@ def push(rows: List[dict], repo_id: str, out_dir: str) -> None:
     api.upload_file(path_or_fileobj=os.path.join(out_dir, "README.md"),
                     path_in_repo="README.md", repo_id=repo_id,
                     repo_type="dataset")
-    # gate: everyone must accept the license terms before downloading
-    api.update_repo_settings(repo_id, repo_type="dataset", gated="auto")
-    print(f"pushed to https://huggingface.co/datasets/{repo_id} (gated, CC-BY-NC-4.0)")
+    api.update_repo_settings(repo_id, repo_type="dataset", gated=False)
+    print(f"pushed to https://huggingface.co/datasets/{repo_id} (ungated, MIT)")
 
 
 def main() -> None:
@@ -221,7 +208,7 @@ def main() -> None:
     ap.add_argument("-o", "--out-dir", default=HF_DIR)
     ap.add_argument("--repo", default=DEFAULT_REPO)
     ap.add_argument("--push", action="store_true",
-                    help="create/update the gated Hub dataset")
+                    help="create/update the Hub dataset")
     args = ap.parse_args()
 
     rows = build(args.pact, args.out_dir, args.repo)
