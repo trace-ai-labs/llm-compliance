@@ -1,16 +1,17 @@
-# Why Do AI Agents Break Rules? (AIES 2026) - code and data
+# Why Do AI Agents Break Rules? How Framing, Context, and Social Signals Shape Compliance
 
-**What makes AI agents follow the rules?** Code and data for our AIES 2026 study of
-AI agent compliance: how rule framing, incentives, authority, peer signals, and user
-pressure change whether LLM agents follow regulations. Twelve
-instruction-tuned models act as an enterprise procurement assistant under a single
-embedded rule, and we measure how compliance shifts with rule phrasing, financial
-enforcement, institutional authority, peer signals, and direct user pressure.
+Code and data for our AIES 2026 paper on what makes AI agents follow the rules.
+Twelve instruction-tuned LLMs act as an enterprise procurement assistant under a
+single legal rule, and we measure how compliance shifts with rule phrasing,
+financial enforcement, institutional authority, peer signals, and direct user
+pressure. Given the same rule, compliance ranges from 43.5% to 89.5% on the
+choice of model alone; a small, beatable fine often lowers compliance because it
+reads as a price; and a deadline gets past a built-in follow-the-law
+instruction for eleven of the twelve models.
 
-- **Paper:** https://trace-ai-labs.github.io/ai-incentives/paper.pdf
+- **Paper:** https://arxiv.org/abs/2608.12323 (AAAI/ACM Conference on AI, Ethics, and Society 2026; also at the COLM 2026 Workshop on Agent Behavior)
 - **Interactive results:** https://trace-ai-labs.github.io/ai-incentives/
-- **arXiv:** https://arxiv.org/abs/2608.12323
-- **Follow-up benchmark:** [PACT](https://trace-ai-labs.github.io/pact/), an LLM compliance benchmark across 12 regulated domains
+- **Follow-up benchmark:** [PACT](https://trace-ai-labs.github.io/pact/) extends this study to 48 scenarios across 12 regulated domains
 
 ## The task
 
