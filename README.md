@@ -13,6 +13,15 @@ instruction for eleven of the twelve models.
 - **Interactive results:** https://trace-ai-labs.github.io/ai-incentives/
 - **Follow-up benchmark:** [PACT](https://trace-ai-labs.github.io/pact/) extends this study to 48 scenarios across 12 regulated domains
 
+## Key findings
+
+- Under identical conditions, compliance spans 46 percentage points across the twelve models, from 43.5% to 89.5%, on the choice of model alone.
+- Specifying a financial penalty can turn a categorical legal obligation into a cost-benefit calculation that favors violation. A small, beatable fine lowers compliance for several models.
+- Models differ in which pressure breaks them. Some treat the regulation as binding however it is worded; others fail under low penalties and non-command phrasing.
+- Financial incentives, managerial demands, peer outcomes, and employee pressure each produce large compliance failures. A deadline gets past a built-in follow-the-law instruction for eleven of the twelve models.
+- Benchmark scores and developers' own descriptions of post-training do not predict where a model falls.
+- Embedding the rule in the system prompt is not on its own enough to produce a compliant agent. Model selection is itself a governance decision.
+
 ## The task
 
 The agent works in a company chat, is told to keep costs down, and its system prompt
