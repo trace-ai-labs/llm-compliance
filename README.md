@@ -11,7 +11,6 @@ enforcement, institutional authority, peer signals, and direct user pressure.
 - **Interactive results:** https://trace-ai-labs.github.io/ai-incentives/
 - **arXiv:** https://arxiv.org/abs/2608.12323
 - **Follow-up benchmark:** [PACT](https://trace-ai-labs.github.io/pact/), an LLM compliance benchmark across 12 regulated domains
-- **Background:** [AI agent compliance](https://trace-ai-labs.github.io/ai-agent-compliance/) and [LLM compliance](https://trace-ai-labs.github.io/llm-compliance/) explainers
 
 ## The task
 
